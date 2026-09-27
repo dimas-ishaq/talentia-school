@@ -1,76 +1,28 @@
-# Nuxt Minimal Starter
+# Talentia — School App
 
-Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
+Platform manajemen sekolah modern untuk guru, siswa, dan orang tua.
 
-## Setup
+## Memulai
 
-Make sure to install dependencies:
-
-```bash
-# npm
+```sh
 npm install
-
-# pnpm
-pnpm install
-
-# yarn
-yarn install
-
-# bun
-bun install
-```
-
-## Development Server
-
-Start the development server on `http://localhost:3000`:
-
-```bash
-# npm
+cp .env.example .env   # lalu isi nilai-nilai yang dibutuhkan
 npm run dev
-
-# pnpm
-pnpm dev
-
-# yarn
-yarn dev
-
-# bun
-bun run dev
 ```
 
-## Production
+Skrip lain: `npm run build`, `npm run typecheck`, `npm run db:push`, `npm run db:seed`, `npm run db:studio`.
 
-Build the application for production:
+## Struktur
 
-```bash
-# npm
-npm run build
+- `app/` — halaman, komponen, composables (Nuxt client)
+- `server/` — API routes, utilitas, middleware (Nitro)
+- `shared/` — tipe & utilitas yang dipakai bersama client/server
+- `drizzle/` — skema & migrasi database
+- `scripts/` — skrip operasional (backup, migrasi, reset)
+- `utils/`, `public/` — aset & helper
+- `docs/` — catatan fitur, implementasi, dan checklist
 
-# pnpm
-pnpm build
+## Dokumentasi
 
-# yarn
-yarn build
-
-# bun
-bun run build
-```
-
-Locally preview production build:
-
-```bash
-# npm
-npm run preview
-
-# pnpm
-pnpm preview
-
-# yarn
-yarn preview
-
-# bun
-bun run preview
-```
-
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
-# talentia-school
+Lihat folder [`docs/`](./docs) untuk dokumentasi fitur dan catatan teknis.
+PostgreSQL: lihat [`POSTGRESQL.md`](./POSTGRESQL.md).

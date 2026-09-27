@@ -1,0 +1,4 @@
+import { classes } from '~~/server/database/schema'
+import { createActiveStatusHandler } from '~~/server/utils/activeStatus'
+
+export default createActiveStatusHandler(classes, 'Kelas')

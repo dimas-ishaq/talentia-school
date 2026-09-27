@@ -1,0 +1,137 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+}
+
+@layer base {
+  :root {
+    --background: 240 5% 96%;
+    --foreground: 240 10% 4%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 4%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 4%;
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --border: 240 5.9% 88%;
+    --input: 240 5.9% 88%;
+    --ring: 240 5.9% 65%;
+    --radius: 0.5rem;
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04), 0 1px 3px rgb(0 0 0 / 0.06);
+    --shadow-appbar: 0 1px 3px rgb(0 0 0 / 0.05), 0 1px 2px rgb(0 0 0 / 0.05);
+  }
+
+  .dark {
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+    --card: 217 33% 17%;
+    --card-foreground: 210 40% 98%;
+    --popover: 217 33% 17%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 5.9% 10%;
+    --secondary: 215 25% 27%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 215 25% 27%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 215 25% 27%;
+    --accent-foreground: 210 40% 98%;
+    --border: 215 25% 27%;
+    --input: 215 25% 27%;
+    --ring: 215 20% 65%;
+    --shadow-card: 0 1px 3px rgb(0 0 0 / 0.35);
+    --shadow-appbar: 0 1px 3px rgb(0 0 0 / 0.35);
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+@layer components {
+  /* Kartu: bayangan lembut "porsi pas" ala shadcn */
+  .card {
+    @apply rounded-xl bg-white border border-slate-200 dark:border-slate-700 dark:bg-slate-800;
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Appbar/topbar & sidebar: bayangan tipis sebagai pemisah */
+  .appbar {
+    box-shadow: var(--shadow-appbar);
+  }
+}
+
+@layer utilities {
+  /* Terapkan bayangan kartu ke pola kartu yang sudah ada di app
+     (rounded-xl + border + bg-white), tanpa mengubah tiap komponen. */
+  .rounded-xl.border.bg-white {
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Transisi antar halaman Nuxt: opacity + geser 2px, tanpa menggeser layout. */
+  .page-enter-active,
+  .page-leave-active {
+    transition: opacity 0.16s ease, transform 0.16s ease;
+  }
+  .page-enter-from,
+  .page-leave-to {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+
+  /* Shell sidebar: lebar ikut layout, isi dianimasikan oleh AppSidebar. */
+  .sidebar-shell-enter-active,
+  .sidebar-shell-leave-active {
+    overflow: hidden;
+    transition: width 0.32s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease;
+  }
+  .sidebar-shell-enter-from,
+  .sidebar-shell-leave-to {
+    width: 0;
+    opacity: 0;
+  }
+  .sidebar-shell-enter-to,
+  .sidebar-shell-leave-from {
+    width: 16rem;
+    opacity: 1;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .page-enter-active,
+    .page-leave-active,
+    .sidebar-enter-active,
+    .sidebar-leave-active {
+      transition: none;
+    }
+    .page-enter-from,
+    .page-leave-to,
+    .sidebar-enter-from,
+    .sidebar-leave-to {
+      transform: none;
+    }
+  }
+}

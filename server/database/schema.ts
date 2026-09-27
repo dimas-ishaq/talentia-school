@@ -1,0 +1,86 @@
+// Runtime schema selector.
+import * as sqlite from './schema.sqlite'
+import * as postgres from './schema.postgres'
+
+const selected = process.env.DATABASE_URL?.startsWith('postgres') ? postgres : sqlite
+
+export const organizations: typeof sqlite.organizations = selected.organizations as typeof sqlite.organizations
+export const organizationMembers: typeof sqlite.organizationMembers = selected.organizationMembers as typeof sqlite.organizationMembers
+export const organizationInvites: typeof sqlite.organizationInvites = selected.organizationInvites as typeof sqlite.organizationInvites
+export const activities: typeof sqlite.activities = selected.activities as typeof sqlite.activities
+export const activitiesRelations: typeof sqlite.activitiesRelations = selected.activitiesRelations as typeof sqlite.activitiesRelations
+export const activityProgress: typeof sqlite.activityProgress = selected.activityProgress as typeof sqlite.activityProgress
+export const activityProgressRelations: typeof sqlite.activityProgressRelations = selected.activityProgressRelations as typeof sqlite.activityProgressRelations
+export const forumDiscussions: typeof sqlite.forumDiscussions = selected.forumDiscussions as typeof sqlite.forumDiscussions
+export const forumDiscussionsRelations: typeof sqlite.forumDiscussionsRelations = selected.forumDiscussionsRelations as typeof sqlite.forumDiscussionsRelations
+export const forumPosts: typeof sqlite.forumPosts = selected.forumPosts as typeof sqlite.forumPosts
+export const forumPostsRelations: typeof sqlite.forumPostsRelations = selected.forumPostsRelations as typeof sqlite.forumPostsRelations
+export const announcements: typeof sqlite.announcements = selected.announcements as typeof sqlite.announcements
+export const announcementsRelations: typeof sqlite.announcementsRelations = selected.announcementsRelations as typeof sqlite.announcementsRelations
+export const attendance: typeof sqlite.attendance = selected.attendance as typeof sqlite.attendance
+export const attendanceRelations: typeof sqlite.attendanceRelations = selected.attendanceRelations as typeof sqlite.attendanceRelations
+export const auditLogs: typeof sqlite.auditLogs = selected.auditLogs as typeof sqlite.auditLogs
+export const calendarEvents: typeof sqlite.calendarEvents = selected.calendarEvents as typeof sqlite.calendarEvents
+export const calendarEventsRelations: typeof sqlite.calendarEventsRelations = selected.calendarEventsRelations as typeof sqlite.calendarEventsRelations
+export const calendarEventTypes: typeof sqlite.calendarEventTypes = selected.calendarEventTypes as typeof sqlite.calendarEventTypes
+export const categories: typeof sqlite.categories = selected.categories as typeof sqlite.categories
+export const classes: typeof sqlite.classes = selected.classes as typeof sqlite.classes
+export const classesRelations: typeof sqlite.classesRelations = selected.classesRelations as typeof sqlite.classesRelations
+export const courseClasses: typeof sqlite.courseClasses = selected.courseClasses as typeof sqlite.courseClasses
+export const courseClassesRelations: typeof sqlite.courseClassesRelations = selected.courseClassesRelations as typeof sqlite.courseClassesRelations
+export const courseGradeWeights: typeof sqlite.courseGradeWeights = selected.courseGradeWeights as typeof sqlite.courseGradeWeights
+export const courseGradeWeightsRelations: typeof sqlite.courseGradeWeightsRelations = selected.courseGradeWeightsRelations as typeof sqlite.courseGradeWeightsRelations
+export const courses: typeof sqlite.courses = selected.courses as typeof sqlite.courses
+export const coursesRelations: typeof sqlite.coursesRelations = selected.coursesRelations as typeof sqlite.coursesRelations
+export const courseTeachers: typeof sqlite.courseTeachers = selected.courseTeachers as typeof sqlite.courseTeachers
+export const courseTeachersRelations: typeof sqlite.courseTeachersRelations = selected.courseTeachersRelations as typeof sqlite.courseTeachersRelations
+export const examEventClasses: typeof sqlite.examEventClasses = selected.examEventClasses as typeof sqlite.examEventClasses
+export const examEventClassesRelations: typeof sqlite.examEventClassesRelations = selected.examEventClassesRelations as typeof sqlite.examEventClassesRelations
+export const examEvents: typeof sqlite.examEvents = selected.examEvents as typeof sqlite.examEvents
+export const examEventsRelations: typeof sqlite.examEventsRelations = selected.examEventsRelations as typeof sqlite.examEventsRelations
+export const examEventSubjectClasses: typeof sqlite.examEventSubjectClasses = selected.examEventSubjectClasses as typeof sqlite.examEventSubjectClasses
+export const examEventSubjectClassesRelations: typeof sqlite.examEventSubjectClassesRelations = selected.examEventSubjectClassesRelations as typeof sqlite.examEventSubjectClassesRelations
+export const examEventSubjects: typeof sqlite.examEventSubjects = selected.examEventSubjects as typeof sqlite.examEventSubjects
+export const examEventSubjectsRelations: typeof sqlite.examEventSubjectsRelations = selected.examEventSubjectsRelations as typeof sqlite.examEventSubjectsRelations
+export const exams: typeof sqlite.exams = selected.exams as typeof sqlite.exams
+export const examSesi: typeof sqlite.examSesi = selected.examSesi as typeof sqlite.examSesi
+export const examSesiRelations: typeof sqlite.examSesiRelations = selected.examSesiRelations as typeof sqlite.examSesiRelations
+export const examSessionOverrides: typeof sqlite.examSessionOverrides = selected.examSessionOverrides as typeof sqlite.examSessionOverrides
+export const examSessionOverridesRelations: typeof sqlite.examSessionOverridesRelations = selected.examSessionOverridesRelations as typeof sqlite.examSessionOverridesRelations
+export const examSessions: typeof sqlite.examSessions = selected.examSessions as typeof sqlite.examSessions
+export const examSessionsRelations: typeof sqlite.examSessionsRelations = selected.examSessionsRelations as typeof sqlite.examSessionsRelations
+export const examsRelations: typeof sqlite.examsRelations = selected.examsRelations as typeof sqlite.examsRelations
+export const finalGrades: typeof sqlite.finalGrades = selected.finalGrades as typeof sqlite.finalGrades
+export const finalGradesRelations: typeof sqlite.finalGradesRelations = selected.finalGradesRelations as typeof sqlite.finalGradesRelations
+export const grades: typeof sqlite.grades = selected.grades as typeof sqlite.grades
+export const gradesRelations: typeof sqlite.gradesRelations = selected.gradesRelations as typeof sqlite.gradesRelations
+export const parents: typeof sqlite.parents = selected.parents as typeof sqlite.parents
+export const parentsRelations: typeof sqlite.parentsRelations = selected.parentsRelations as typeof sqlite.parentsRelations
+export const questionBank: typeof sqlite.questionBank = selected.questionBank as typeof sqlite.questionBank
+export const questionBankRelations: typeof sqlite.questionBankRelations = selected.questionBankRelations as typeof sqlite.questionBankRelations
+export const questionOptions: typeof sqlite.questionOptions = selected.questionOptions as typeof sqlite.questionOptions
+export const questionOptionsRelations: typeof sqlite.questionOptionsRelations = selected.questionOptionsRelations as typeof sqlite.questionOptionsRelations
+export const questionPackages: typeof sqlite.questionPackages = selected.questionPackages as typeof sqlite.questionPackages
+export const questionPackagesRelations: typeof sqlite.questionPackagesRelations = selected.questionPackagesRelations as typeof sqlite.questionPackagesRelations
+export const quizAttemptAnswers: typeof sqlite.quizAttemptAnswers = selected.quizAttemptAnswers as typeof sqlite.quizAttemptAnswers
+export const quizAttemptAnswersRelations: typeof sqlite.quizAttemptAnswersRelations = selected.quizAttemptAnswersRelations as typeof sqlite.quizAttemptAnswersRelations
+export const quizAttempts: typeof sqlite.quizAttempts = selected.quizAttempts as typeof sqlite.quizAttempts
+export const quizAttemptsRelations: typeof sqlite.quizAttemptsRelations = selected.quizAttemptsRelations as typeof sqlite.quizAttemptsRelations
+export const quizEvents: typeof sqlite.quizEvents = selected.quizEvents as typeof sqlite.quizEvents
+export const quizEventsRelations: typeof sqlite.quizEventsRelations = selected.quizEventsRelations as typeof sqlite.quizEventsRelations
+export const quizQuestions: typeof sqlite.quizQuestions = selected.quizQuestions as typeof sqlite.quizQuestions
+export const quizQuestionsRelations: typeof sqlite.quizQuestionsRelations = selected.quizQuestionsRelations as typeof sqlite.quizQuestionsRelations
+export const scheduleEntries: typeof sqlite.scheduleEntries = selected.scheduleEntries as typeof sqlite.scheduleEntries
+export const scheduleEntriesRelations: typeof sqlite.scheduleEntriesRelations = selected.scheduleEntriesRelations as typeof sqlite.scheduleEntriesRelations
+export const sections: typeof sqlite.sections = selected.sections as typeof sqlite.sections
+export const sectionsRelations: typeof sqlite.sectionsRelations = selected.sectionsRelations as typeof sqlite.sectionsRelations
+export const settings: typeof sqlite.settings = selected.settings as typeof sqlite.settings
+export const students: typeof sqlite.students = selected.students as typeof sqlite.students
+export const studentsRelations: typeof sqlite.studentsRelations = selected.studentsRelations as typeof sqlite.studentsRelations
+export const subjects: typeof sqlite.subjects = selected.subjects as typeof sqlite.subjects
+export const teachers: typeof sqlite.teachers = selected.teachers as typeof sqlite.teachers
+export const teachersRelations: typeof sqlite.teachersRelations = selected.teachersRelations as typeof sqlite.teachersRelations
+export const users: typeof sqlite.users = selected.users as typeof sqlite.users
+export const usersRelations: typeof sqlite.usersRelations = selected.usersRelations as typeof sqlite.usersRelations
+
+export * from './schema.sqlite'

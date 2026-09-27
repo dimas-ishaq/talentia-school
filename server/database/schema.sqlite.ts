@@ -240,6 +240,8 @@ export const finalGrades = sqliteTable('final_grades', {
   componentsJson: text('components_json'),  // Komponen per type dengan rata-rata dan skor
   calculatedAt: integer('calculated_at', { mode: 'timestamp' }).notNull(),
   calculatedBy: text('calculated_by').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  // Fase 3: kapan nilai akhir dipublish ke siswa. null = masih draft.
+  publishedAt: integer('published_at', { mode: 'timestamp' }),
   version: integer('version').notNull().default(1), // versi snapshot (increment saat re-calculate)
 })
 
@@ -494,6 +496,10 @@ export const activities = sqliteTable('activities', {
   attachments: text('attachments'),
   points: integer('points'),
   maxPoint: real('max_point').notNull().default(100),
+  // Nilai minimal untuk dianggap lulus (khusus quiz). 0/null = tidak ada ambang.
+  passingScore: real('passing_score'),
+  // Fase 2: izinkan pengumpulan setelah dueDate (default true untuk assignment).
+  allowLateSubmission: integer('allow_late_submission', { mode: 'boolean' }).notNull().default(true),
   durationMinutes: integer('duration_minutes'),
   openAt: text('open_at'),
   closeAt: text('close_at'),
@@ -518,6 +524,14 @@ export const activities = sqliteTable('activities', {
   // Khusus type 'link': view = klik link dihitung selesai, complete = siswa menandai sendiri
   linkCompletionRule: text('link_completion_rule', { enum: ['view', 'complete'] }).notNull().default('view'),
   linkOpenInNewTab: integer('link_open_in_new_tab', { mode: 'boolean' }).notNull().default(true),
+  // Khusus type 'presentation':
+  // - presentationSource: 'file' (upload internal) atau 'link' (URL eksternal)
+  // - presentationFileUrl: path PDF hasil konversi PPTX/PPT (untuk pdfjs-dist viewer)
+  // - presentationOriginalUrl: path file asli (.ppt/.pptx) untuk diunduh kembali oleh siswa
+  presentationSource: text('presentation_source', { enum: ['file', 'link'] }),
+  presentationFileUrl: text('presentation_file_url'),
+  presentationOriginalUrl: text('presentation_original_url'),
+  presentationPageCount: integer('presentation_page_count'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 })
 
@@ -734,6 +748,9 @@ export const activityProgress = sqliteTable('activity_progress', {
   activityId: text('activity_id').notNull().references(() => activities.id, { onDelete: 'cascade' }),
   studentId: text('student_id').notNull().references(() => students.id, { onDelete: 'cascade' }),
   submission: text('submission'),
+  // ABC: teks + file + link (JSON string array + url string)
+  submissionFiles: text('submission_files'),
+  submissionLink: text('submission_link'),
   score: real('score'),
   feedback: text('feedback'),
   attemptCount: integer('attempt_count').notNull().default(0),
@@ -745,6 +762,12 @@ export const activityProgress = sqliteTable('activity_progress', {
   completedAt: integer('completed_at', { mode: 'timestamp' }),
   submittedAt: integer('submitted_at', { mode: 'timestamp' }),
   gradedAt: integer('graded_at', { mode: 'timestamp' }),
+  // Fase 2: metadata pengumpulan
+  isLate: integer('is_late', { mode: 'boolean' }).notNull().default(false),
+  returnedAt: integer('returned_at', { mode: 'timestamp' }),
+  returnReason: text('return_reason'),
+  // Fase 3: kapan nilai dipublish ke siswa
+  scorePublishedAt: integer('score_published_at', { mode: 'timestamp' }),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 }, (table) => ({ uniqueActivityStudent: uniqueIndex('ap_as_idx').on(table.activityId, table.studentId) }))
 

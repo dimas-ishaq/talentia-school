@@ -48,6 +48,9 @@ export default defineEventHandler(async (event) => {
       gradedAt: now,
       completedAt: existing.completedAt ?? now,
       submittedAt: existing.submittedAt ?? now,
+      // Fase 3: grading guru belum publish. Endpoint publish/unpublish
+      // menentukan kapan siswa bisa melihat nilai.
+      scorePublishedAt: existing.scorePublishedAt ?? null,
     }).where(eq(activityProgress.id, existing.id))
   } else {
     await db.insert(activityProgress).values({

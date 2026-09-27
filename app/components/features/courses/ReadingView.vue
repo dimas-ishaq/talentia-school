@@ -4,14 +4,17 @@ import { pesanDariError } from '~/composables/useStudents'
 
 const route = useRoute()
 const courseId = computed(() => String(route.params.id))
+const { returnTo } = useCourseReturn(() => `/dashboard/courses/${courseId.value}`)
 const activityId = computed(() => String(route.params.activityId))
 const { data, pending, error, refresh } = await useFetch(() => `/api/courses/${courseId.value}`, { key: `reading-${courseId.value}` })
 const course = computed<any>(() => data.value?.data)
 const activity = computed<any>(() => course.value?.sections?.flatMap((s: any) => s.activities || []).find((a: any) => a.id === activityId.value))
 const section = computed<any>(() => course.value?.sections?.find((s: any) => s.activities?.some((a: any) => a.id === activityId.value)))
+const { items: breadcrumbItems } = useCourseBreadcrumb({ courseId, activityId, course })
 const errorMessage = ref('')
 const completing = ref(false)
 const { isStudent, isAdmin, isTeacher } = useAuth()
+const activityNav = useActivityNavigation(course, activityId, isStudent)
 const { confirm } = useConfirm()
 const canManage = computed(() => isAdmin.value || isTeacher.value)
 const canPreview = computed(() => canManage.value)
@@ -56,10 +59,10 @@ onMounted(async () => {
 <template>
   <div class="mx-auto max-w-4xl space-y-4">
     <div v-if="pending" class="h-48 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-700" />
-    <div v-else-if="error || !activity" class="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">Materi tidak ditemukan. <NuxtLink :to="`/dashboard/courses/${courseId}`" class="underline">Kembali ke course</NuxtLink></div>
+    <div v-else-if="error || !activity" class="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">Materi tidak ditemukan. <NuxtLink :to="returnTo" class="underline">Kembali</NuxtLink></div>
     <template v-else>
+      <AppBreadcrumb :back-to="returnTo" :items="breadcrumbItems" />
       <div class="flex items-center gap-3">
-        <NuxtLink :to="`/dashboard/courses/${courseId}`" class="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"><Icon name="heroicons:arrow-left" class="h-4 w-4" /></NuxtLink>
         <div class="min-w-0"><p class="truncate text-xs text-slate-500 dark:text-slate-400">{{ course?.name }} · {{ section?.title }}</p><h1 class="truncate text-xl font-bold text-slate-800 dark:text-slate-100">{{ activity.title }}</h1></div>
         <span v-if="isPreview" class="ml-auto rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">Pratinjau siswa</span>
         <div class="ml-auto flex items-center gap-2">
@@ -78,6 +81,7 @@ onMounted(async () => {
       </article>
 
       <div v-if="errorMessage" class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">{{ errorMessage }}</div>
+      <ActivityNavigation :previous="activityNav.previous.value" :next="activityNav.next.value" :link="activityNav.link" class="pt-1" />
       <div v-if="isPreview" class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400">
         Ini tampilan pratinjau. Siswa akan melihat materi ini beserta tombol "Tandai selesai dibaca".
       </div>

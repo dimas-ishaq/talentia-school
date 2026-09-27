@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import type { QuizQuestion } from '~/types/quiz'
+import { sanitizeHtml } from '~/utils/sanitizeHtml'
 const route = useRoute()
 const { confirm } = useConfirm()
 const courseId = computed(() => String(route.params.id))
 const quizId = computed(() => String(route.params.activityId))
+const { returnTo } = useCourseReturn(() => `/dashboard/courses/${courseId.value}`)
+const { data: takeCourseData } = useFetch<any>(() => `/api/courses/${courseId.value}`, { key: `quiz-take-course-${courseId.value}` })
+const { items: breadcrumbItems } = useCourseBreadcrumb({ courseId, activityId: quizId, course: () => takeCourseData.value?.data, leaf: () => ({ label: 'Mengerjakan Quiz' }) })
+const takeNav = useActivityNavigation(() => takeCourseData.value?.data, quizId, () => true)
 const attemptId = ref('')
 const phase = ref<'loading' | 'intro' | 'taking' | 'done'>('loading')
 const info = ref<any>(null)
@@ -28,11 +33,21 @@ const saveState = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
 const result = ref<any>(null)
 const resultMessage = computed(() => result.value?.autoSubmitted ? 'Waktu habis. Jawaban dikirim otomatis.' : 'Jawaban berhasil dikirim.')
 const review = ref<{ questions: QuizQuestion[]; answers: any[] } | null>(null)
+const reviewOpen = ref(false)
+const reviewLoading = ref(false)
 const canReview = computed(() => info.value?.reviewMode !== 'never' && (info.value?.reviewMode !== 'after_close' || (!!info.value?.closeAt && Date.now() >= new Date(info.value.closeAt).getTime())))
-async function loadReview() {
-  if (!result.value?.id || !canReview.value) return
-  const response = await $fetch<{ data: { questions: QuizQuestion[]; answers: any[] } }>(`/api/courses/${courseId.value}/quizzes/${quizId.value}/attempts/${result.value.id}`)
-  review.value = { questions: response.data.questions, answers: response.data.answers }
+const reviewButtonLabel = computed(() => reviewOpen.value ? 'Tutup Review Jawaban' : 'Review Jawaban')
+async function toggleReview() {
+  if (!canReview.value || reviewLoading.value) return
+  if (!review.value) {
+    reviewLoading.value = true
+    try {
+      if (!result.value?.id) return
+      const response = await $fetch<{ data: { questions: QuizQuestion[]; answers: any[] } }>(`/api/courses/${courseId.value}/quizzes/${quizId.value}/attempts/${result.value.id}`)
+      review.value = { questions: response.data.questions, answers: response.data.answers }
+    } finally { reviewLoading.value = false }
+  }
+  reviewOpen.value = !reviewOpen.value
 }
 const reviewItems = computed(() => {
   if (!review.value) return []
@@ -171,7 +186,7 @@ async function loadInfo() {
     info.value = res.data; fullscreenMode.value = !!res.data.fullscreenMode; examMode.value = !!res.data.examMode
     result.value = res.data.latestAttempt
     if (res.data.hasActiveAttempt) phase.value = 'intro'
-    else if (res.data.latestAttempt) { phase.value = 'done'; if (canReview.value) void loadReview() }
+    else if (res.data.latestAttempt) phase.value = 'done'
     else phase.value = 'intro'
   } catch (e: any) { phase.value = 'done'; message.value = e?.data?.statusMessage || 'Quiz tidak dapat dibuka' }
 }
@@ -219,7 +234,6 @@ async function submit(auto = false) {
     const refreshed = await $fetch<{ data: any }>(`/api/courses/${courseId.value}/quizzes/${quizId.value}/info`)
     info.value = refreshed.data
     result.value = refreshed.data.latestAttempt
-    if (canReview.value) void loadReview()
   } catch (e: any) {
     message.value = e?.data?.statusMessage || 'Gagal mengirim jawaban.'
   } finally {
@@ -280,10 +294,11 @@ const saveLabel = computed(() => ({
     <!-- Layar informasi & konfirmasi sebelum mengerjakan -->
     <div v-else-if="phase === 'intro'" class="flex flex-1 items-center justify-center p-4">
       <div class="w-full max-w-2xl space-y-4">
+        <AppBreadcrumb :back-to="returnTo" :items="breadcrumbItems" />
         <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
           <p class="text-xs font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">Sebelum Mengerjakan</p>
           <h1 class="mt-1 text-xl font-bold text-slate-800 dark:text-slate-100">{{ info?.title || 'Quiz' }}</h1>
-          <p v-if="info?.content" class="mt-2 whitespace-pre-line text-sm text-slate-600 dark:text-slate-300">{{ info.content }}</p>
+          <div v-if="info?.content" class="mt-2 rich-content min-w-0 max-w-full overflow-hidden text-sm text-slate-600 dark:text-slate-300" v-html="sanitizeHtml(info.content)" />
 
           <!-- Ringkasan aturan umum -->
           <dl class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -315,7 +330,7 @@ const saveLabel = computed(() => ({
 
           <div v-if="info?.instructions" class="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200">
             <p class="mb-2 font-semibold">Instruksi Guru</p>
-            <p class="whitespace-pre-line">{{ info.instructions }}</p>
+            <div class="rich-content min-w-0 max-w-full overflow-hidden" v-html="sanitizeHtml(info.instructions)" />
           </div>
 
           <!-- Aturan pengerjaan umum -->
@@ -344,7 +359,7 @@ const saveLabel = computed(() => ({
           <p v-if="introError" class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-300">{{ introError }}</p>
 
           <div class="mt-5 flex items-center justify-end gap-2">
-            <NuxtLink :to="`/dashboard/courses/${courseId}`" class="flex h-10 items-center rounded-lg px-4 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700">Batal</NuxtLink>
+            <NuxtLink :to="returnTo" class="inline-flex h-11 items-center rounded-lg px-4 text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700">Batal</NuxtLink>
             <button class="h-10 rounded-lg bg-emerald-500 px-5 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50" :disabled="starting || (info?.hasPassword && !password)" @click="beginQuiz">
               {{ starting ? 'Menyiapkan...' : (info?.hasActiveAttempt ? 'Lanjutkan Mengerjakan' : 'Mulai Mengerjakan') }}
             </button>
@@ -353,8 +368,9 @@ const saveLabel = computed(() => ({
       </div>
     </div>
 
-    <div v-else-if="phase === 'done'" class="flex flex-1 items-center justify-center p-4">
-      <div class="w-full max-w-2xl space-y-4">
+    <div v-else-if="phase === 'done'" class="min-h-screen w-full bg-slate-100 px-4 py-6 dark:bg-slate-950 sm:px-6">
+      <div class="mx-auto w-full max-w-6xl space-y-4">
+        <AppBreadcrumb :back-to="returnTo" :items="breadcrumbItems" />
         <section class="rounded-2xl border border-emerald-200 bg-white p-6 shadow-sm dark:border-emerald-800 dark:bg-slate-800">
           <p class="text-xs font-semibold uppercase tracking-wide text-emerald-600">Hasil Ujian</p>
           <h1 class="mt-1 text-xl font-bold text-slate-800 dark:text-slate-100">{{ info?.title || 'Quiz' }}</h1>
@@ -375,12 +391,15 @@ const saveLabel = computed(() => ({
             <div class="rounded-lg bg-slate-50 p-3 dark:bg-slate-700/40"><dt class="text-xs text-slate-400">Pelanggaran</dt><dd class="font-semibold">{{ result?.violationCount ?? result?.violations?.total ?? 0 }} kali</dd></div>
           </dl>
           <div class="mt-5 flex flex-wrap justify-end gap-2">
+            <button v-if="canReview" :disabled="reviewLoading" class="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" :class="reviewOpen ? 'bg-slate-600 hover:bg-slate-700' : 'bg-indigo-600 hover:bg-indigo-700'" @click="toggleReview">
+              <Icon :name="reviewOpen ? 'heroicons:eye-slash' : 'heroicons:eye'" class="h-4 w-4" /> {{ reviewLoading ? 'Memuat...' : reviewButtonLabel }}
+            </button>
             <button v-if="canRetake" class="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600" @click="phase = 'intro'">Kerjakan Ujian</button>
-            <NuxtLink :to="`/dashboard/courses/${courseId}`" class="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 dark:border-slate-600 dark:text-slate-300">Kembali ke Kursus</NuxtLink>
+            <NuxtLink :to="returnTo" class="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"><Icon name="heroicons:arrow-left" class="h-5 w-5" /> Kembali</NuxtLink>
           </div>
         </section>
 
-        <section v-if="canReview && reviewItems.length" class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <section v-if="canReview && reviewOpen && reviewItems.length" class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
           <h2 class="text-sm font-bold text-slate-800 dark:text-slate-100">Review Jawaban</h2>
           <p class="mt-1 text-xs text-slate-400">Pembahasan jawaban untuk keperluan pembelajaran.</p>
           <div class="mt-4 space-y-4">
@@ -399,6 +418,10 @@ const saveLabel = computed(() => ({
             </article>
           </div>
         </section>
+
+        <p v-if="info?.reviewMode === 'after_close' && !canReview" class="rounded-lg bg-amber-50 px-4 py-2 text-center text-sm text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">Review akan tersedia setelah quiz ditutup.</p>
+        <p v-else-if="info?.reviewMode === 'never'" class="rounded-lg bg-slate-100 px-4 py-2 text-center text-sm text-slate-500 dark:bg-slate-800 dark:text-slate-400">Review jawaban dinonaktifkan oleh guru untuk quiz ini.</p>
+        <ActivityNavigation :previous="takeNav.previous.value" :next="takeNav.next.value" :link="takeNav.link" class="pt-2" />
       </div>
     </div>
 
@@ -533,7 +556,7 @@ const saveLabel = computed(() => ({
 
     <div v-else-if="phase === 'taking'" class="flex-1 p-6 text-center text-slate-500 dark:text-slate-400">
       Belum ada soal pada quiz ini.
-      <NuxtLink :to="`/dashboard/courses/${courseId}`" class="ml-1 underline">Kembali</NuxtLink>
+      <NuxtLink :to="returnTo" class="ml-1 underline">Kembali</NuxtLink>
     </div>
   </div>
 </template>

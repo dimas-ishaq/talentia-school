@@ -1,10 +1,14 @@
 <script setup lang="ts">
 definePageMeta({ layout: 'dashboard', middleware: ['auth'] })
+const route = useRoute()
+const courseId = computed(() => String(route.params.id))
+const { returnTo } = useCourseReturn(() => `/dashboard/courses/${route.params.id}`)
+const { items: breadcrumbItems } = useCourseBreadcrumb({ courseId, leaf: () => ({ label: 'Kehadiran' }) })
 </script>
 
 <template>
   <div class="mx-auto max-w-6xl space-y-5">
-    <NuxtLink :to="`/dashboard/courses/${$route.params.id}`" class="inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition hover:text-indigo-600"><Icon name="heroicons:arrow-left" class="h-4 w-4" /> Kembali ke Course</NuxtLink>
+    <AppBreadcrumb :back-to="returnTo" :items="breadcrumbItems" />
     <CourseLogbookView :course-id="String($route.params.id)" />
   </div>
 </template>

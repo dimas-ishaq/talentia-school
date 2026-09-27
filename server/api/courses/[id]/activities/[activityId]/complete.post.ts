@@ -1,9 +1,12 @@
 // server/api/courses/[id]/activities/[activityId]/complete.post.ts
-// Tandai materi bacaan (type 'text') sebagai selesai dibaca oleh siswa.
+// Siswa menandai activity sebagai selesai — dipakai untuk link dengan
+// linkCompletionRule = complete dan activity yang visible = manual.
+// Fase 1: evaluasi completion terpusat; endpoint ini juga mengisi viewedAt.
 import { eq, and } from 'drizzle-orm'
 import { activities, students, courseClasses, sections, activityProgress } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
 import { findCourseOrThrow } from '~~/server/utils/courseAccess'
+import { evaluateCompletion } from '~~/server/utils/completion'
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
@@ -25,10 +28,7 @@ export default defineEventHandler(async (event) => {
   })
   if (!enrolled) throw createError({ statusCode: 403, statusMessage: 'Anda tidak terdaftar di course ini' })
 
-  const activity = await db.query.activities.findFirst({
-    where: eq(activities.id, activityId),
-    columns: { id: true, sectionId: true },
-  })
+  const activity = await db.query.activities.findFirst({ where: eq(activities.id, activityId) })
   if (!activity) throw createError({ statusCode: 404, statusMessage: 'Activity tidak ditemukan' })
 
   const section = await db.query.sections.findFirst({
@@ -44,7 +44,14 @@ export default defineEventHandler(async (event) => {
   })
 
   const now = new Date()
-  const values = { viewedAt: existing?.viewedAt ?? now, completedAt: now }
+  const values: Record<string, any> = { viewedAt: existing?.viewedAt ?? now }
+  // Link dengan rule complete memang ditandai manual lewat endpoint ini.
+  // Activity lain yang sudah lewat evaluateCompletion juga bisa final lewat sini,
+  // sehingga UI tidak perlu menebak.
+  const merged = { ...existing, ...values }
+  const decision = evaluateCompletion({ activity, progress: { ...merged, completedAt: now } })
+  values.completedAt = decision.done ? (existing?.completedAt ?? now) : null
+
   if (existing) {
     await db.update(activityProgress).set(values).where(eq(activityProgress.id, existing.id))
   } else {
@@ -56,5 +63,5 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  return { success: true, data: { completedAt: now.toISOString() } }
+  return { success: true, data: { completedAt: values.completedAt, done: decision.done, reason: decision.reason } }
 })

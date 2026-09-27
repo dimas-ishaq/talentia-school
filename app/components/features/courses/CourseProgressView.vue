@@ -3,9 +3,11 @@ import { pesanDariError } from '~/composables/useStudents'
 
 const route = useRoute()
 const id = computed(() => String(route.params.id))
+const { returnTo } = useCourseReturn(() => `/dashboard/courses/${id.value}`)
 const search = ref('')
 
 const { data, pending, error, refresh } = await useFetch(() => `/api/courses/${id.value}/progress`, { key: `progress-${id.value}` })
+const { items: breadcrumbProgress } = useCourseBreadcrumb({ courseId: id, leaf: () => ({ label: 'Progress Siswa' }) })
 const progress = computed<any>(() => data.value?.data)
 
 const activities = computed<any[]>(() => progress.value?.activities ?? [])
@@ -77,15 +79,11 @@ async function saveGrade() {
     <div v-if="gradeMessage" class="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">{{ gradeMessage }}</div>
     <div v-if="gradeError" class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">{{ gradeError }}</div>
     <template v-else>
+      <AppBreadcrumb :back-to="returnTo" :items="breadcrumbProgress" />
       <div class="flex flex-wrap items-start justify-between gap-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6">
-        <div class="flex items-start gap-3">
-          <NuxtLink :to="`/dashboard/courses/${id}`" class="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700" title="Kembali ke kursus">
-            <Icon name="heroicons:arrow-left" class="h-4 w-4" />
-          </NuxtLink>
-          <div>
-            <h1 class="text-2xl font-bold text-slate-800 dark:text-slate-100">Progress Siswa</h1>
-            <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ students.length }} siswa · {{ activities.length }} kegiatan</p>
-          </div>
+        <div>
+          <h1 class="text-2xl font-bold text-slate-800 dark:text-slate-100">Progress Siswa</h1>
+          <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ students.length }} siswa · {{ activities.length }} kegiatan</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <input v-model="search" class="field max-w-xs" placeholder="Cari nama siswa..." />
@@ -164,7 +162,13 @@ async function saveGrade() {
             <button class="text-xl text-slate-400" @click="selectedSubmission = null"><Icon name="heroicons:x-mark" class="h-5 w-5" /></button>
           </div>
 
-          <div class="mt-5 whitespace-pre-wrap rounded-lg bg-slate-50 p-4 text-sm leading-6 text-slate-700 dark:bg-slate-700/50 dark:text-slate-300">{{ selectedSubmission.p.submission || 'Tidak ada konten submission.' }}</div>
+          <div class="mt-5 space-y-2 rounded-lg bg-slate-50 p-4 text-sm leading-6 text-slate-700 dark:bg-slate-700/50 dark:text-slate-300">
+            <p v-if="selectedSubmission.p.returned" class="rounded bg-orange-50 px-2 py-1 text-xs font-semibold text-orange-700 dark:bg-orange-900/20 dark:text-orange-300">Dikembalikan: {{ selectedSubmission.p.returnReason || 'Harap revisi.' }}</p>
+            <p v-if="selectedSubmission.p.submission" class="whitespace-pre-wrap">{{ selectedSubmission.p.submission }}</p>
+            <p v-if="selectedSubmission.p.submissionLink"><a :href="selectedSubmission.p.submissionLink" target="_blank" rel="noopener" class="text-emerald-600 underline">{{ selectedSubmission.p.submissionLink }}</a></p>
+            <p v-for="f in selectedSubmission.p.submissionFiles ?? []" :key="f.url"><a :href="f.url" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-emerald-600 underline"><Icon name="heroicons:paper-clip" class="h-3 w-3" />{{ f.name }}</a></p>
+            <p v-if="!selectedSubmission.p.submission && !selectedSubmission.p.submissionLink && !selectedSubmission.p.submissionFiles?.length" class="text-slate-400">Tidak ada konten submission.</p>
+          </div>
 
           <div class="mt-5 grid gap-3 sm:grid-cols-2">
             <div>

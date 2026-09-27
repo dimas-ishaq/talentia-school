@@ -3,8 +3,11 @@ const route = useRoute()
 const { confirm } = useConfirm()
 const courseId = computed(() => String(route.params.id))
 const quizId = computed(() => String(route.params.activityId))
+const { returnTo, withReturnTo } = useCourseReturn(() => `/dashboard/courses/${courseId.value}/quizzes/${quizId.value}`)
 const { data: courseData } = await useFetch<any>(() => `/api/courses/${courseId.value}`)
+const course = computed(() => courseData.value?.data)
 const activity = computed(() => courseData.value?.data?.sections?.flatMap((s: any) => s.activities ?? []).find((a: any) => a.id === quizId.value))
+const { items: breadcrumbItems } = useCourseBreadcrumb({ courseId, activityId: quizId, course, leaf: () => ({ label: 'Hasil & Koreksi' }) })
 const { data, pending, refresh } = await useFetch<{ data: any[] }>(() => `/api/courses/${courseId.value}/quizzes/${quizId.value}/attempts`)
 const attempts = computed(() => data.value?.data ?? [])
 const statusLabel: Record<string, string> = { in_progress: 'Mengerjakan', submitted: 'Selesai', auto_submitted: 'Waktu habis', abandoned: 'Ditinggalkan', needs_grading: 'Perlu dikoreksi' }
@@ -68,8 +71,8 @@ async function saveGrades() {
 </script>
 <template>
   <div class="mx-auto max-w-5xl space-y-5">
-    <NuxtLink :to="`/dashboard/courses/${courseId}`" class="text-sm text-slate-500">&larr; Kembali ke course</NuxtLink>
-    <header class="flex items-center justify-between"><div><h1 class="text-2xl font-bold text-slate-800 dark:text-slate-100">Hasil & Koreksi</h1><p class="text-sm text-slate-500">{{ activity?.title || 'Quiz' }}</p></div><div class="flex flex-wrap items-center gap-2"><button v-if="selectedIds.length" class="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="resettingBulk" @click="resetSelected">{{ resettingBulk ? 'Mereset...' : `Reset terpilih (${selectedIds.length})` }}</button><NuxtLink :to="`/dashboard/courses/${courseId}/quizzes/${quizId}/analysis`" class="rounded-lg border px-3 py-2 text-sm text-emerald-600">Analisis Butir Soal</NuxtLink><NuxtLink :to="`/dashboard/courses/${courseId}/quizzes/${quizId}/manage`" class="rounded-lg border px-3 py-2 text-sm">Kelola Soal</NuxtLink></div></header>
+    <AppBreadcrumb :back-to="returnTo" :items="breadcrumbItems" />
+    <header class="flex items-center justify-between"><div><h1 class="text-2xl font-bold text-slate-800 dark:text-slate-100">Hasil & Koreksi</h1><p class="text-sm text-slate-500">{{ activity?.title || 'Quiz' }}</p></div><div class="flex flex-wrap items-center gap-2"><button v-if="selectedIds.length" class="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" :disabled="resettingBulk" @click="resetSelected">{{ resettingBulk ? 'Mereset...' : `Reset terpilih (${selectedIds.length})` }}</button><NuxtLink :to="withReturnTo(`/dashboard/courses/${courseId}/quizzes/${quizId}/analysis`)" class="rounded-lg border px-3 py-2 text-sm text-emerald-600">Analisis Butir Soal</NuxtLink><NuxtLink :to="withReturnTo(`/dashboard/courses/${courseId}/quizzes/${quizId}/manage`)" class="rounded-lg border px-3 py-2 text-sm">Kelola Soal</NuxtLink></div></header>
     <p v-if="resetMessage" class="rounded-lg bg-amber-50 p-3 text-sm text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">{{ resetMessage }}</p>
     <div v-if="pending" class="h-40 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-700" />
     <div v-else-if="!attempts.length" class="rounded-xl border bg-white p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800">Belum ada percobaan.</div>

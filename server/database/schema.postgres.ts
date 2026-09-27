@@ -238,6 +238,8 @@ export const finalGrades = pgTable('final_grades', {
   componentsJson: text('components_json'),  // Komponen per type dengan rata-rata dan skor
   calculatedAt: timestamp('created_at').notNull(),
   calculatedBy: text('calculated_by').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  // Fase 3: kapan nilai akhir dipublish ke siswa. null = masih draft.
+  publishedAt: timestamp('published_at'),
   version: integer('version').notNull().default(1), // versi snapshot (increment saat re-calculate)
 })
 
@@ -492,12 +494,16 @@ export const activities = pgTable('activities', {
   attachments: text('attachments'),
   points: integer('points'),
   maxPoint: real('max_point').notNull().default(100),
+  // Nilai minimal untuk dianggap lulus (khusus quiz). 0/null = tidak ada ambang.
+  passingScore: real('passing_score'),
+  // Fase 2: izinkan pengumpulan setelah dueDate (default true untuk assignment).
+  allowLateSubmission: boolean('allow_late_submission').notNull().default(true),
   durationMinutes: integer('duration_minutes'),
   openAt: text('open_at'),
   closeAt: text('close_at'),
   maxAttempts: integer('max_attempts'),
-  examMode: boolean('is_active').notNull().default(false),
-  fullscreenMode: boolean('is_active').notNull().default(false),
+  examMode: boolean('exam_mode').notNull().default(false),
+  fullscreenMode: boolean('fullscreen_mode').notNull().default(false),
   // Kata sandi kuis (hash bcrypt) + aturan pengerjaan dari guru
   quizPassword: text('quiz_password'),
   quizInstructions: text('quiz_instructions'),
@@ -508,14 +514,22 @@ export const activities = pgTable('activities', {
   reviewMode: text('review_mode', { enum: ['immediate', 'after_close', 'never'] }).notNull().default('immediate'),
   dueDate: text('due_date'),
   position: integer('position').notNull(),
-  isRequired: boolean('is_active').notNull().default(true),
-  isVisible: boolean('is_active').notNull().default(true),
+  isRequired: boolean('is_required').notNull().default(true),
+  isVisible: boolean('is_visible').notNull().default(true),
   forumRequirePost: boolean('forum_require_post').notNull().default(false),
   forumRequireReply: boolean('forum_require_reply').notNull().default(false),
   forumCompletionRule: text('forum_completion_rule', { enum: ['view', 'post', 'reply'] }).notNull().default('view'),
   // Khusus type 'link': view = klik link dihitung selesai, complete = siswa menandai sendiri
   linkCompletionRule: text('link_completion_rule', { enum: ['view', 'complete'] }).notNull().default('view'),
   linkOpenInNewTab: boolean('link_open_in_new_tab').notNull().default(true),
+  // Khusus type 'presentation':
+  // - presentationSource: 'file' (upload internal) atau 'link' (URL eksternal)
+  // - presentationFileUrl: path PDF hasil konversi PPTX/PPT (untuk pdfjs-dist viewer)
+  // - presentationOriginalUrl: path file asli (.ppt/.pptx) untuk diunduh kembali oleh siswa
+  presentationSource: text('presentation_source', { enum: ['file', 'link'] }),
+  presentationFileUrl: text('presentation_file_url'),
+  presentationOriginalUrl: text('presentation_original_url'),
+  presentationPageCount: integer('presentation_page_count'),
   createdAt: timestamp('created_at').notNull().$defaultFn(() => new Date()),
 })
 
@@ -673,7 +687,7 @@ export const questionOptions = pgTable('question_options', {
   questionId: text('question_id').notNull().references(() => questionBank.id, { onDelete: 'cascade' }),
   label: text('label').notNull(),
   text: text('text').notNull(),
-  isCorrect: boolean('is_active').notNull().default(false),
+  isCorrect: boolean('is_correct').notNull().default(false),
 })
 
 export const quizQuestions = pgTable('quiz_questions', {
@@ -697,7 +711,7 @@ export const quizAttempts = pgTable('quiz_attempts', {
   attemptNumber: integer('attempt_number').notNull(),
   startedAt: timestamp('created_at').notNull(),
   submittedAt: timestamp('created_at'),
-  autoSubmitted: boolean('is_active').notNull().default(false),
+  autoSubmitted: boolean('auto_submitted').notNull().default(false),
   status: text('status', { enum: ['in_progress', 'submitted', 'auto_submitted', 'abandoned', 'needs_grading'] }).notNull().default('in_progress'),
   score: real('score'),
   sessionId: text('session_id').references(() => examSessions.id, { onDelete: 'set null' }),
@@ -719,10 +733,10 @@ export const quizAttemptAnswers = pgTable('quiz_attempt_answers', {
   quizQuestionId: text('quiz_question_id').notNull().references(() => quizQuestions.id, { onDelete: 'cascade' }),
   selectedOptionId: text('selected_option_id'),
   answerText: text('answer_text'),
-  isCorrect: boolean('is_active'),
+  isCorrect: boolean('is_correct'),
   pointsEarned: real('points_earned'),
   gradedBy: text('graded_by').references(() => users.id, { onDelete: 'set null' }),
-  gradedAt: timestamp('created_at'),
+  gradedAt: timestamp('graded_at'),
   feedback: text('feedback'),
 })
 
@@ -732,6 +746,9 @@ export const activityProgress = pgTable('activity_progress', {
   activityId: text('activity_id').notNull().references(() => activities.id, { onDelete: 'cascade' }),
   studentId: text('student_id').notNull().references(() => students.id, { onDelete: 'cascade' }),
   submission: text('submission'),
+  // ABC: teks + file + link
+  submissionFiles: text('submission_files'),
+  submissionLink: text('submission_link'),
   score: real('score'),
   feedback: text('feedback'),
   attemptCount: integer('attempt_count').notNull().default(0),
@@ -739,10 +756,15 @@ export const activityProgress = pgTable('activity_progress', {
   lastScore: real('last_score'),
   bestAttemptId: text('best_attempt_id'),
   lastAttemptId: text('last_attempt_id'),
-  viewedAt: timestamp('created_at'),
-  completedAt: timestamp('created_at'),
-  submittedAt: timestamp('created_at'),
-  gradedAt: timestamp('created_at'),
+  viewedAt: timestamp('viewed_at'),
+  completedAt: timestamp('completed_at'),
+  submittedAt: timestamp('submitted_at'),
+  gradedAt: timestamp('graded_at'),
+  isLate: boolean('is_late').notNull().default(false),
+  returnedAt: timestamp('returned_at'),
+  returnReason: text('return_reason'),
+  // Fase 3: kapan nilai dipublish ke siswa
+  scorePublishedAt: timestamp('score_published_at'),
   createdAt: timestamp('created_at').notNull().$defaultFn(() => new Date()),
 }, (table) => ({ uniqueActivityStudent: uniqueIndex('ap_as_idx').on(table.activityId, table.studentId) }))
 

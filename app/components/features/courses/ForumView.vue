@@ -2,10 +2,13 @@
 const route = useRoute()
 const courseId = computed(() => String(route.params.id))
 const activityId = computed(() => String(route.params.activityId))
-const { isAdmin, isTeacher, user } = useAuth()
+const { returnTo } = useCourseReturn(() => `/dashboard/courses/${courseId.value}`)
+const { isAdmin, isTeacher, isStudent, user } = useAuth()
 const canManage = computed(() => isAdmin.value || isTeacher.value)
 const { data: courseData } = await useFetch<any>(() => `/api/courses/${courseId.value}`, { key: `forum-course-${courseId.value}` })
+const activityNav = useActivityNavigation(computed(() => courseData.value?.data), activityId, isStudent)
 const activity = computed(() => courseData.value?.data?.sections?.flatMap((s: any) => s.activities ?? []).find((item: any) => item.id === activityId.value))
+const { items: breadcrumbItems } = useCourseBreadcrumb({ courseId, activityId, course: () => courseData.value?.data })
 const discussions = ref<any[]>([])
 const posts = ref<any[]>([])
 const selectedDiscussionId = ref('')
@@ -69,7 +72,7 @@ async function deletePost(post: any) {
 
 <template>
   <div class="mx-auto max-w-6xl space-y-5">
-    <NuxtLink :to="`/dashboard/courses/${courseId}`" class="text-sm text-slate-500">&larr; Kembali ke course</NuxtLink>
+    <AppBreadcrumb :back-to="returnTo" :items="breadcrumbItems" />
     <header><p class="text-xs font-semibold uppercase tracking-wide text-emerald-600">Forum diskusi</p><h1 class="mt-1 text-2xl font-bold text-slate-800 dark:text-slate-100">{{ activity?.title || 'Forum' }}</h1><p class="mt-1 text-sm text-slate-500">Diskusikan topik, baca tanggapan, dan balas kontribusi peserta.</p></header>
     <p v-if="errorMessage" class="rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20">{{ errorMessage }}</p>
     <div class="grid gap-5 lg:grid-cols-[280px_1fr]">
@@ -85,6 +88,7 @@ async function deletePost(post: any) {
         <template v-else><div class="border-b border-slate-200 pb-4 dark:border-slate-700"><h2 class="text-xl font-bold text-slate-800 dark:text-slate-100">{{ selectedDiscussion.title }}</h2><p class="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600 dark:text-slate-300">{{ selectedDiscussion.question }}</p></div><div class="space-y-4 py-5"><div v-if="!selectedPosts.length" class="text-sm text-slate-500">Belum ada tanggapan. Jadilah yang pertama berdiskusi.</div><article v-for="post in selectedPosts" :key="post.id" class="rounded-lg border border-slate-200 p-4 dark:border-slate-700" :class="post.parentId ? 'ml-6' : ''"><p class="text-xs font-semibold text-emerald-600">{{ post.authorName }} <span class="font-normal text-slate-400">· {{ new Date(post.createdAt).toLocaleString('id-ID') }}</span></p><p class="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700 dark:text-slate-200">{{ post.content }}</p><div class="mt-2 flex gap-3 text-xs"><button class="font-semibold text-emerald-600 hover:underline" @click="replyTo = post.id">Balas</button><button v-if="post.userId === user?.id || canManage" class="text-emerald-600" @click="editPost(post)">Edit</button><button v-if="post.userId === user?.id || canManage" class="text-red-600" @click="deletePost(post)">Hapus</button></div></article></div><form class="border-t border-slate-200 pt-4 dark:border-slate-700" @submit.prevent="savePost"><textarea v-model="message" class="field h-24" :placeholder="editingPost ? 'Edit tanggapan...' : replyTo ? 'Tulis balasan...' : 'Tulis tanggapan...'" required /><div class="mt-2 flex justify-end gap-2"><button v-if="replyTo || editingPost" type="button" class="btn-secondary" @click="editingPost ? cancelPostEdit() : replyTo = null">Batal</button><button class="btn" :disabled="saving">{{ saving ? 'Menyimpan...' : editingPost ? 'Simpan perubahan' : 'Kirim tanggapan' }}</button></div></form></template>
       </main>
     </div>
+    <ActivityNavigation :previous="activityNav.previous.value" :next="activityNav.next.value" :link="activityNav.link" />
   </div>
 </template>
 

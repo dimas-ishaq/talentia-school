@@ -6,6 +6,11 @@ import { db } from '~~/server/utils/db'
 import { requireCourseManager } from '~~/server/utils/courseAccess'
 import { regradeQuiz } from '~~/server/utils/itemAnalysis'
 
+function assertValidDueDate(v: string | null | undefined): void {
+  if (!v || !String(v).trim()) return
+  if (!Number.isFinite(new Date(String(v).trim()).getTime())) throw createError({ statusCode: 400, statusMessage: 'Tenggat tidak valid.' })
+}
+
 const schema = z.object({
   type: z.enum(['text', 'file', 'video', 'quiz', 'assignment', 'forum', 'presentation', 'link']).optional(),
   title: z.string().trim().min(1).max(200).optional(),
@@ -16,6 +21,8 @@ const schema = z.object({
   attachments: z.array(z.object({ name: z.string().max(200), url: z.string().max(500), kind: z.string().max(30) })).max(20).optional(),
   points: z.number().int().min(0).max(1000).nullable().optional(),
   maxPoint: z.number().min(0).max(10000).optional(),
+  passingScore: z.number().min(0).max(100).nullable().optional(),
+  allowLateSubmission: z.boolean().optional(),
   durationMinutes: z.number().int().min(0).max(1440).nullable().optional(),
   openAt: z.string().trim().nullable().optional(),
   closeAt: z.string().trim().nullable().optional(),
@@ -27,7 +34,7 @@ const schema = z.object({
   status: z.enum(['draft', 'published']).optional(),
   scoreVisibility: z.enum(['immediate', 'after_close', 'never']).optional(),
   reviewMode: z.enum(['immediate', 'after_close', 'never']).optional(),
-  dueDate: z.string().trim().optional(),
+  dueDate: z.string().trim().nullable().optional(),
   position: z.number().int().min(0).optional(),
   isRequired: z.boolean().optional(),
   isVisible: z.boolean().optional(),
@@ -36,6 +43,10 @@ const schema = z.object({
   forumCompletionRule: z.enum(['view', 'post', 'reply']).optional(),
   linkCompletionRule: z.enum(['view', 'complete']).optional(),
   linkOpenInNewTab: z.boolean().optional(),
+  presentationSource: z.enum(['file', 'link']).nullable().optional(),
+  presentationFileUrl: z.string().trim().max(500).nullable().optional(),
+  presentationOriginalUrl: z.string().trim().max(500).nullable().optional(),
+  presentationPageCount: z.number().int().min(0).nullable().optional(),
 })
 
 export default defineEventHandler(async (event) => {
@@ -43,6 +54,7 @@ export default defineEventHandler(async (event) => {
   const activityId = getRouterParam(event, 'activityId')!
   await requireCourseManager(event, courseId)
   const body = schema.parse(await readBody(event))
+  assertValidDueDate(body.dueDate)
   if (body.type === 'link' && body.url !== undefined && !/^https?:\/\/\S+$/.test(body.url)) throw createError({ statusCode: 400, statusMessage: 'URL link harus diawali http:// atau https://' })
   if (body.type === 'quiz') {
     if (body.maxPoint !== undefined && body.maxPoint < 1) throw createError({ statusCode: 400, statusMessage: 'Nilai maksimum quiz minimal 1' })
@@ -62,6 +74,8 @@ export default defineEventHandler(async (event) => {
   if (body.attachments !== undefined) updateData.attachments = body.attachments.length ? JSON.stringify(body.attachments) : null
   if (body.points !== undefined) updateData.points = body.points
   if (body.maxPoint !== undefined) updateData.maxPoint = body.maxPoint
+  if (body.passingScore !== undefined) updateData.passingScore = body.passingScore
+  if (body.allowLateSubmission !== undefined) updateData.allowLateSubmission = body.allowLateSubmission
   if (body.durationMinutes !== undefined) updateData.durationMinutes = body.durationMinutes
   if (body.openAt !== undefined) updateData.openAt = body.openAt || null
   if (body.closeAt !== undefined) updateData.closeAt = body.closeAt || null
@@ -82,6 +96,10 @@ export default defineEventHandler(async (event) => {
   if (body.forumCompletionRule !== undefined) updateData.forumCompletionRule = body.forumCompletionRule
   if (body.linkCompletionRule !== undefined) updateData.linkCompletionRule = body.linkCompletionRule
   if (body.linkOpenInNewTab !== undefined) updateData.linkOpenInNewTab = body.linkOpenInNewTab
+  if (body.presentationSource !== undefined) updateData.presentationSource = body.presentationSource
+  if (body.presentationFileUrl !== undefined) updateData.presentationFileUrl = body.presentationFileUrl
+  if (body.presentationOriginalUrl !== undefined) updateData.presentationOriginalUrl = body.presentationOriginalUrl
+  if (body.presentationPageCount !== undefined) updateData.presentationPageCount = body.presentationPageCount
 
   if (Object.keys(updateData).length) {
     const [updated] = await db.update(activities).set(updateData).where(eq(activities.id, activityId)).returning({ id: activities.id })

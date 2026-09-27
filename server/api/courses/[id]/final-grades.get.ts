@@ -21,6 +21,7 @@ export default defineEventHandler(async (event) => {
       feedback: finalGrades.feedback,
       componentsJson: finalGrades.componentsJson,
       calculatedAt: finalGrades.calculatedAt,
+      publishedAt: finalGrades.publishedAt,
       version: finalGrades.version,
     })
     .from(finalGrades)

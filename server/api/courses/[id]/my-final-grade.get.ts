@@ -21,7 +21,8 @@ export default defineEventHandler(async (event) => {
   const row = await db.query.finalGrades.findFirst({
     where: and(eq(finalGrades.courseId, courseId), eq(finalGrades.studentId, student.id)),
   })
-  if (!row) return { data: null }
+  // Fase 3: guru harus mempublish nilai akhir sebelum siswa bisa melihatnya.
+  if (!row?.publishedAt) return { data: null }
 
   return {
     data: {

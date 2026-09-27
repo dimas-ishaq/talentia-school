@@ -4,9 +4,11 @@ import type { QuestionPackage } from '~/types/questionPackage'
 const route = useRoute()
 const courseId = computed(() => String(route.params.id))
 const quizId = computed(() => String(route.params.activityId || route.params.quizId))
+const { returnTo, withReturnTo } = useCourseReturn(() => `/dashboard/courses/${courseId.value}/quizzes/${quizId.value}`)
 const { data: courseData } = await useFetch<any>(() => `/api/courses/${courseId.value}`)
 const course = computed(() => courseData.value?.data)
 const activity = computed(() => course.value?.sections?.flatMap((s: any) => s.activities ?? []).find((a: any) => a.id === quizId.value))
+const { items: breadcrumbItems } = useCourseBreadcrumb({ courseId, activityId: quizId, course, leaf: () => ({ label: 'Kelola Soal' }) })
 const targetClassIds = ref<string[]>([])
 const { data: questionData, refresh } = await useFetch<{ data: QuizQuestion[] }>(() => `/api/courses/${courseId.value}/quizzes/${quizId.value}/questions`)
 const { data: packageData } = await useFetch<{ data: QuestionPackage[] }>(() => `/api/courses/${courseId.value}/question-packages`)
@@ -60,8 +62,8 @@ async function remove(id: string) { await $fetch(`/api/courses/${courseId.value}
 </script>
 <template>
   <div class="mx-auto max-w-6xl space-y-5">
-    <NuxtLink :to="`/dashboard/courses/${courseId}/quizzes/${quizId}`" class="text-sm text-slate-500">&larr; Kembali ke detail quiz</NuxtLink>
-    <header class="flex flex-wrap items-start justify-between gap-3"><div><p class="text-xs font-semibold uppercase tracking-wide text-emerald-600">{{ activity?.title || 'Quiz' }}</p><h1 class="mt-1 text-2xl font-bold text-slate-800 dark:text-slate-100">Kelola soal</h1><p class="mt-1 text-sm text-slate-500">Susun pertanyaan, bobot, dan kunci jawaban quiz.</p></div><div class="flex flex-wrap gap-2"><NuxtLink :to="`/dashboard/courses/${courseId}/activities/${quizId}/edit`" class="btn-secondary">Edit pengaturan</NuxtLink><NuxtLink :to="`/dashboard/courses/${courseId}/quizzes/${quizId}/grading`" class="btn-secondary">Hasil pengerjaan</NuxtLink><button class="btn" :disabled="!questions.length" @click="openPreview">Pratinjau quiz</button></div></header>
+    <AppBreadcrumb :back-to="returnTo" :items="breadcrumbItems" />
+    <header class="flex flex-wrap items-start justify-between gap-3"><div><p class="text-xs font-semibold uppercase tracking-wide text-emerald-600">{{ activity?.title || 'Quiz' }}</p><h1 class="mt-1 text-2xl font-bold text-slate-800 dark:text-slate-100">Kelola soal</h1><p class="mt-1 text-sm text-slate-500">Susun pertanyaan, bobot, dan kunci jawaban quiz.</p></div><div class="flex flex-wrap gap-2"><NuxtLink :to="withReturnTo(`/dashboard/courses/${courseId}/activities/${quizId}/edit`)" class="btn-secondary">Edit pengaturan</NuxtLink><NuxtLink :to="withReturnTo(`/dashboard/courses/${courseId}/quizzes/${quizId}/grading`)" class="btn-secondary">Hasil pengerjaan</NuxtLink><button class="btn" :disabled="!questions.length" @click="openPreview">Pratinjau quiz</button></div></header>
     <section class="grid grid-cols-2 gap-3 sm:grid-cols-3"><div class="summary-card"><span>Jumlah soal</span><strong>{{ questions.length }}</strong></div><div class="summary-card"><span>Total bobot</span><strong>{{ totalPoints }}</strong><small>poin</small></div><div class="summary-card"><span>Status</span><strong :class="questions.length ? 'text-emerald-600' : 'text-amber-600'">{{ questions.length ? 'Siap diatur' : 'Belum ada soal' }}</strong></div></section>
     <section class="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
       <div><h2 class="font-semibold">Tambahkan dari paket soal</h2><p class="mt-1 text-sm text-slate-500">Pilih paket untuk memasukkan soal yang sudah tersedia.</p></div>

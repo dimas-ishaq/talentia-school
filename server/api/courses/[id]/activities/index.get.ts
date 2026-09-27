@@ -20,6 +20,8 @@ export default defineEventHandler(async (event) => {
       sectionTitle: sections.title,
       points: activities.points,
       maxPoint: activities.maxPoint,
+      dueDate: activities.dueDate,
+      allowLateSubmission: activities.allowLateSubmission,
     })
     .from(activities)
     .innerJoin(sections, eq(activities.sectionId, sections.id))
@@ -33,13 +35,7 @@ export default defineEventHandler(async (event) => {
   if (!submitActs.length) return { data: [] }
 
   const progressRows = await db
-    .select({
-      activityId: activityProgress.activityId,
-      studentId: activityProgress.studentId,
-      submission: activityProgress.submission,
-      submittedAt: activityProgress.submittedAt,
-      gradedAt: activityProgress.gradedAt,
-    })
+    .select()
     .from(activityProgress)
     .where(inArray(activityProgress.activityId, submitActs.map((a) => a.id)))
 
@@ -55,8 +51,15 @@ export default defineEventHandler(async (event) => {
     : []
   const studentMap = new Map(studentRows.map((s) => [s.id, s]))
 
+  const parseFiles = (raw: string | null): { name: string; url: string }[] => {
+    try {
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+      return Array.isArray(parsed) ? parsed.filter((x) => x?.url) : []
+    } catch { return [] }
+  }
+
   const data = progressRows
-    .filter((p) => p.submittedAt && !p.gradedAt)
+    .filter((p) => p.submittedAt && (!p.gradedAt || p.returnedAt))
     .map((p) => {
       const act = actMap.get(p.activityId)!
       const stu = studentMap.get(p.studentId)
@@ -71,7 +74,16 @@ export default defineEventHandler(async (event) => {
         sectionTitle: act.sectionTitle,
         points: act.points,
         maxPoint: act.maxPoint,
+        dueDate: act.dueDate,
+        allowLateSubmission: act.allowLateSubmission,
+        isLate: p.isLate,
         submission: p.submission,
+        submissionLink: p.submissionLink ?? null,
+        submissionFiles: parseFiles(p.submissionFiles),
+        returnedAt: p.returnedAt ?? null,
+        returnReason: p.returnReason ?? null,
+        score: p.score ?? null,
+        feedback: p.feedback ?? null,
         submittedAt: p.submittedAt,
       }
     })

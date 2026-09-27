@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { parseVideoUrl } from '~/utils/video'
+import { sanitizeHtml } from '~/utils/sanitizeHtml'
+import { stripHtml } from '~/utils/htmlText'
 
 const route = useRoute()
 const id = computed(() => String(route.params.id))
@@ -50,6 +52,75 @@ const subjectLabel = computed(() => (subjectsData.value?.data ?? []).find((item:
 
 const router = useRouter()
 const openSections = ref<Record<string, boolean>>({})
+const { withReturnTo } = useCourseReturn(() => `/dashboard/courses/${id.value}`)
+const draggedSection = ref<any>(null)
+const draggedActivity = ref<{ sectionId: string; activity: any } | null>(null)
+const reordering = ref(false)
+const openMenu = ref<string | null>(null)
+function toggleMenu(key: string) { openMenu.value = openMenu.value === key ? null : key }
+function closeMenu() { openMenu.value = null }
+if (import.meta.client) window.addEventListener('click', closeMenu)
+onBeforeUnmount(() => { if (import.meta.client) window.removeEventListener('click', closeMenu) })
+function arrayMove<T>(list: T[], from: number, to: number) { const next = [...list]; const [m] = next.splice(from, 1); next.splice(to, 0, m!); return next }
+
+function startSectionDrag(section: any, event?: DragEvent) { if (!canManage.value) return; draggedSection.value = section; if (event?.dataTransfer) { event.dataTransfer.effectAllowed = 'move'; try { event.dataTransfer.setData('text/plain', section.id) } catch {} } }
+async function dropSection(target: any) {
+  if (draggedActivity.value) return
+  const source = draggedSection.value
+  draggedSection.value = null
+  if (!source || source.id === target.id || !canManage.value) return
+  const sections = [...(course.value?.sections ?? [])]
+  const from = sections.findIndex((item: any) => item.id === source.id)
+  const to = sections.findIndex((item: any) => item.id === target.id)
+  if (from < 0 || to < 0) return
+  const [moved] = sections.splice(from, 1)
+  sections.splice(to, 0, moved)
+  reordering.value = true
+  try { await $fetch(`/api/courses/${id.value}/sections/reorder`, { method: 'POST', body: { order: sections.map((item: any) => item.id) } }); await refresh() } finally { reordering.value = false }
+}
+function startActivityDrag(sectionId: string, activity: any) { if (canManage.value) draggedActivity.value = { sectionId, activity } }
+async function onSectionDrop(section: any) {
+  if (draggedActivity.value) { await dropActivityAtEnd(section.id); return }
+  await dropSection(section)
+}
+async function dropActivity(sectionId: string, target: any) {
+  const source = draggedActivity.value
+  draggedActivity.value = null
+  if (!source || source.activity.id === target.id || !canManage.value || reordering.value) return
+  const sections = course.value?.sections ?? []
+  const targetSection = sections.find((item: any) => item.id === sectionId)
+  const sourceSection = sections.find((item: any) => item.id === source.sectionId)
+  if (!targetSection || !sourceSection) return
+  const targetIds = (targetSection.activities ?? []).map((item: any) => item.id)
+  if (!targetIds.includes(target.id)) return
+  const payload = source.sectionId === sectionId
+    ? { [sectionId]: arrayMove(targetIds, targetIds.indexOf(source.activity.id), targetIds.indexOf(target.id)) }
+    // Section berbeda: activity pindah section dan disisipkan sebelum target.
+    : { [sectionId]: arrayMove([...targetIds, source.activity.id], targetIds.length, targetIds.indexOf(target.id)), [source.sectionId]: (sourceSection.activities ?? []).map((item: any) => item.id).filter((activityId: string) => activityId !== source.activity.id) }
+  reordering.value = true
+  try { await $fetch(`/api/courses/${id.value}/activities/reorder`, { method: 'POST', body: { sectionOrders: payload } }); await refresh() } finally { reordering.value = false }
+}
+async function dropActivityAtEnd(sectionId: string) {
+  const source = draggedActivity.value
+  draggedActivity.value = null
+  if (!source || !canManage.value || reordering.value) return
+  if (source.sectionId === sectionId) {
+    const ids = (course.value?.sections?.find((item: any) => item.id === sectionId)?.activities ?? []).map((item: any) => item.id)
+    const from = ids.indexOf(source.activity.id)
+    if (from < 0 || from === ids.length - 1) return
+    const payload = { [sectionId]: arrayMove(ids, from, ids.length - 1) }
+    reordering.value = true
+    try { await $fetch(`/api/courses/${id.value}/activities/reorder`, { method: 'POST', body: { sectionOrders: payload } }); await refresh() } finally { reordering.value = false }
+    return
+  }
+  const targetSection = course.value?.sections?.find((item: any) => item.id === sectionId)
+  const sourceSection = course.value?.sections?.find((item: any) => item.id === source.sectionId)
+  if (!targetSection || !sourceSection) return
+  const targetIds = [...(targetSection.activities ?? []).map((item: any) => item.id), source.activity.id]
+  const sourceIds = (sourceSection.activities ?? []).map((item: any) => item.id).filter((activityId: string) => activityId !== source.activity.id)
+  reordering.value = true
+  try { await $fetch(`/api/courses/${id.value}/activities/reorder`, { method: 'POST', body: { sectionOrders: { [sectionId]: targetIds, [source.sectionId]: sourceIds } } }); await refresh() } finally { reordering.value = false }
+}
 
 function toggleOpenSection(sectionId: string) {
   const isOpen = !openSections.value[sectionId]
@@ -139,26 +210,47 @@ function videoInfo(activity: any) { return activity?.type === 'video' ? parseVid
 
 async function openActivity(activity: any) {
   if (activity.type === 'text') {
-    await navigateTo(`/dashboard/courses/${id.value}/read/${activity.id}`)
+    await navigateTo(withReturnTo(`/dashboard/courses/${id.value}/read/${activity.id}`))
     return
   }
   if (activity.type === 'link' || activity.type === 'file' || activity.type === 'video' || activity.type === 'presentation') {
-    await navigateTo(`/dashboard/courses/${id.value}/activity/${activity.id}`)
+    await navigateTo(withReturnTo(`/dashboard/courses/${id.value}/activity/${activity.id}`))
     return
   }
   if (activity.type === 'quiz') {
-    await navigateTo(isStudent.value
+    await navigateTo(withReturnTo(isStudent.value
       ? `/dashboard/courses/${id.value}/quizzes/${activity.id}/take`
-      : `/dashboard/courses/${id.value}/quizzes/${activity.id}`)
+      : `/dashboard/courses/${id.value}/quizzes/${activity.id}`))
     return
   }
   if (activity.type === 'forum') {
-    await navigateTo(`/dashboard/courses/${id.value}/forum/${activity.id}`)
+    await navigateTo(withReturnTo(`/dashboard/courses/${id.value}/forum/${activity.id}`))
     return
   }
-  await navigateTo(`/dashboard/courses/${id.value}/activity/${activity.id}`)
+  await navigateTo(withReturnTo(`/dashboard/courses/${id.value}/activity/${activity.id}`))
 }
-async function submitAssignment() { await $fetch(`/api/courses/${id.value}/activities/${selectedActivity.value.id}/submit`, { method: 'POST', body: { submission: submission.value } }); await refresh(); selectedActivity.value = course.value.sections.flatMap((s: any) => s.activities).find((a: any) => a.id === selectedActivity.value.id) }
+const submissionLink = ref('')
+const submissionFiles = ref<{ name: string; url: string }[]>([])
+const submissionUploading = ref(false)
+async function uploadSubmissionFiles(e: Event) {
+  const picked = Array.from((e.target as HTMLInputElement).files ?? []).slice(0, 5 - submissionFiles.value.length)
+  if (!picked.length) return
+  submissionUploading.value = true
+  try {
+    for (const file of picked) {
+      const body = new FormData(); body.append('file', file)
+      const res = await $fetch<{ data: { name: string; url: string } }>('/api/uploads', { method: 'POST', body })
+      submissionFiles.value.push({ name: res.data.name, url: res.data.url })
+    }
+  } finally { submissionUploading.value = false; (e.target as HTMLInputElement).value = '' }
+}
+async function submitAssignment() {
+  const link = submissionLink.value.trim()
+  if (!submission.value.trim() && !link && !submissionFiles.value.length) return
+  await $fetch(`/api/courses/${id.value}/activities/${selectedActivity.value.id}/submit`, { method: 'POST', body: { submission: submission.value.trim() || undefined, submissionLink: link || undefined, submissionFiles: submissionFiles.value.length || undefined } })
+  await refresh()
+  selectedActivity.value = course.value.sections.flatMap((s: any) => s.activities).find((a: any) => a.id === selectedActivity.value.id)
+}
 function addSection() { editingSection.value = null; sectionForm.value = { title: '', description: '' }; showSectionForm.value = true }
 // Activity types yang selesai via submit, sisanya selesai saat dilihat
 const submitTypes = ['assignment', 'quiz', 'forum']
@@ -174,10 +266,12 @@ function completionLabel(activity: any) {
   return submitTypes.includes(activity.type) ? 'dikumpulkan' : 'dilihat'
 }
 function sectionCompleted(section: any) { return (section.activities ?? []).filter((activity: any) => isCompleted(activity)).length }
-// Progress keseluruhan course untuk siswa
+// Progress course: hanya required yang dihitung; kalau ada required = target.
 const allActivities = computed<any[]>(() => (course.value?.sections ?? []).flatMap((s: any) => s.activities ?? []))
-const completedCount = computed(() => allActivities.value.filter((a: any) => isCompleted(a)).length)
-const progressPercent = computed(() => allActivities.value.length ? Math.round((completedCount.value / allActivities.value.length) * 100) : 0)
+const requiredActivities = computed(() => allActivities.value.filter((a) => !!a.isRequired))
+const requiredProgress = computed(() => requiredActivities.value.length ? requiredActivities.value : allActivities.value)
+const completedCount = computed(() => requiredProgress.value.filter((a: any) => isCompleted(a)).length)
+const progressPercent = computed(() => requiredProgress.value.length ? Math.round((completedCount.value / requiredProgress.value.length) * 100) : 0)
 async function toggleSection(section: any) { await $fetch(`/api/courses/${id.value}/sections/${section.id}`, { method: 'PATCH', body: { isVisible: !section.isVisible } }); await refresh() }
 async function toggleActivity(sectionId: string, activity: any) { await $fetch(`/api/courses/${id.value}/sections/${sectionId}/activities/${activity.id}`, { method: 'PATCH', body: { isVisible: !activity.isVisible } }); await refresh() }
 </script>
@@ -204,16 +298,16 @@ async function toggleActivity(sectionId: string, activity: any) { await $fetch(`
 
             <!-- Button group (segmented): Absensi selalu tampil; aksi pengelola hanya untuk admin/guru -->
             <div class="inline-flex flex-wrap overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700 divide-x divide-slate-200 dark:divide-slate-700">
-              <NuxtLink :to="`/dashboard/courses/${id}/attendance`" class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700">
+              <NuxtLink :to="withReturnTo(`/dashboard/courses/${id}/attendance`)" class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700">
                 <Icon name="heroicons:book-open" class="h-4 w-4" /> Absensi / Logbook
               </NuxtLink>
-              <NuxtLink v-if="canManage" :to="`/dashboard/courses/${id}/progress`" class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700">
+              <NuxtLink v-if="canManage" :to="withReturnTo(`/dashboard/courses/${id}/progress`)" class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700">
                 <Icon name="heroicons:chart-bar" class="h-4 w-4" /> Progress
               </NuxtLink>
-              <NuxtLink v-if="canManage" :to="`/dashboard/courses/${id}/grades`" class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700">
+              <NuxtLink v-if="canManage" :to="withReturnTo(`/dashboard/courses/${id}/grades`)" class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700">
                 <Icon name="heroicons:scale" class="h-4 w-4" /> Bobot & Nilai
               </NuxtLink>
-              <NuxtLink v-if="canManage" :to="`/dashboard/courses/${id}/grading`" class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700">
+              <NuxtLink v-if="canManage" :to="withReturnTo(`/dashboard/courses/${id}/grading`)" class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700">
                 <Icon name="heroicons:clipboard-document-check" class="h-4 w-4" /> Koreksi
               </NuxtLink>
               <button v-if="canManage" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-white bg-emerald-500 hover:bg-emerald-600" @click="editingCourse ? (editingCourse = false) : startCourseEdit()">
@@ -337,24 +431,33 @@ async function toggleActivity(sectionId: string, activity: any) { await $fetch(`
         <h2 class="text-lg font-bold text-slate-800 dark:text-slate-100">Materi</h2>
           <button v-if="canManage" class="btn-primary" @click="addSection">Tambah Section</button>
         </div>
-        <section v-for="section in course.sections" :key="section.id" class="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800" :class="{ 'opacity-70': canManage && !section.isVisible }">
+        <section v-for="section in course.sections" :key="section.id" class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800" :class="{ 'opacity-70': canManage && !section.isVisible, 'opacity-40': draggedSection?.id === section.id }" @dragover.prevent @drop.prevent="onSectionDrop(section)">
           <div class="flex cursor-pointer items-center justify-between gap-3 p-5" @click="toggleOpenSection(section.id)">
-            <div>
+            <div class="flex items-center gap-3">
+              <span v-if="canManage" class="text-slate-300 hover:text-slate-500 dark:text-slate-600 dark:hover:text-slate-400" :class="reordering ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'" title="Geser untuk mengubah urutan section" draggable="true" @click.stop @dragstart="startSectionDrag(section, $event)" @dragend="draggedSection = null"><Icon name="heroicons:bars-3" class="h-5 w-5" /></span>
+              <div>
               <h3 class="font-semibold text-slate-800 dark:text-slate-100">{{ section.title }} <span v-if="canManage && !section.isVisible" class="ml-1 rounded-full bg-slate-200 dark:bg-slate-600 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-300">Tersembunyi</span></h3>
               <p v-if="section.description" class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ section.description }}</p>
               <span v-if="isStudent && (section.activities?.length ?? 0) > 0" class="mt-1 inline-block rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">{{ sectionCompleted(section) }}/{{ section.activities?.length ?? 0 }} selesai</span>
+              </div>
             </div>
             <div class="flex items-center gap-2" @click.stop>
-              <button v-if="canManage" class="icon-btn" :title="section.isVisible ? 'Hide section' : 'Show section'" @click="toggleSection(section)"><Icon :name="section.isVisible ? 'heroicons:eye-slash' : 'heroicons:eye'" class="h-4 w-4" /></button>
-              <button v-if="canManage" class="icon-btn" title="Edit section" @click="startSectionEdit(section)"><Icon name="heroicons:pencil" class="h-4 w-4" /></button>
-              <button v-if="canManage" class="icon-btn" title="Hapus section" @click="deleteSection(section)"><Icon name="heroicons:trash" class="h-4 w-4" /></button>
+              <div v-if="canManage" class="relative">
+                <button class="icon-btn" :aria-expanded="openMenu === `section:${section.id}`" aria-haspopup="menu" title="Menu section" @click.stop="toggleMenu(`section:${section.id}`)"><Icon name="heroicons:ellipsis-vertical" class="h-4 w-4" /></button>
+                <div v-if="openMenu === `section:${section.id}`" class="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800" role="menu" @click.stop>
+                  <button class="menu-item" role="menuitem" @click="openMenu = null; startSectionEdit(section)"><Icon name="heroicons:pencil" class="h-4 w-4" /> Edit section</button>
+                  <button class="menu-item" role="menuitem" @click="openMenu = null; toggleSection(section)"><Icon :name="section.isVisible ? 'heroicons:eye-slash' : 'heroicons:eye'" class="h-4 w-4" /> {{ section.isVisible ? 'Sembunyikan' : 'Tampilkan' }}</button>
+                  <button class="menu-item text-red-600 dark:text-red-400" role="menuitem" @click="openMenu = null; deleteSection(section)"><Icon name="heroicons:trash" class="h-4 w-4" /> Hapus section</button>
+                </div>
+              </div>
               <span class="text-slate-400 dark:text-slate-500"><Icon :name="openSections[section.id] ? 'heroicons:chevron-up' : 'heroicons:chevron-down'" class="h-4 w-4" /></span>
             </div>
           </div>
-          <div v-if="openSections[section.id]" class="space-y-3 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/30 p-4">
-            <article v-for="activity in section.activities" :key="activity.id" class="rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 p-4" :class="{ 'cursor-pointer hover:border-emerald-300': isStudent || canManage, 'opacity-60': canManage && !activity.isVisible }" @click="(isStudent || canManage) && openActivity(activity)">
+          <div v-if="openSections[section.id]" class="space-y-3 rounded-b-xl border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/30 p-4">
+            <article v-for="activity in section.activities" :key="activity.id" class="rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 p-4" :class="[{ 'cursor-pointer hover:border-emerald-300': isStudent || canManage, 'opacity-60': canManage && !activity.isVisible }, draggedActivity?.activity.id === activity.id ? 'opacity-40 ring-2 ring-emerald-200' : '']" :draggable="canManage" @dragstart="startActivityDrag(section.id, activity)" @dragend="draggedActivity = null" @dragover.prevent @drop.prevent="dropActivity(section.id, activity)" @click="(isStudent || canManage) && openActivity(activity)">
               <div class="flex items-start justify-between gap-3">
                 <div class="flex gap-3">
+                  <Icon v-if="canManage" name="heroicons:bars-3" class="mt-0.5 h-4 w-4 shrink-0 cursor-grab text-slate-300 hover:text-slate-400 active:cursor-grabbing dark:text-slate-600" title="Geser untuk mengubah urutan" @click.stop />
                   <Icon :name="icons[activity.type] || 'heroicons:document-text'" class="h-5 w-5 shrink-0 text-slate-600 dark:text-slate-300" />
                   <div>
                     <h4 class="font-semibold text-slate-800 dark:text-slate-100">{{ activity.title }} <span v-if="canManage && !activity.isVisible" class="ml-1 rounded-full bg-slate-200 dark:bg-slate-600 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-300">Tersembunyi</span><span v-if="canManage && activity.type === 'text' && activity.status === 'draft'" class="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">Draft</span></h4>
@@ -365,16 +468,19 @@ async function toggleActivity(sectionId: string, activity: any) { await $fetch(`
                   <span v-if="isStudent" class="inline-flex items-center gap-1" :class="isCompleted(activity) ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'">
                     <Icon v-if="isCompleted(activity)" name="heroicons:check" class="h-3.5 w-3.5" />{{ isCompleted(activity) ? `Selesai (${completionLabel(activity)})` : 'Belum selesai' }}
                   </span>
-                  <template v-if="canManage">
-                    <button class="icon-btn" :title="activity.isVisible ? 'Hide activity' : 'Show activity'" @click="toggleActivity(section.id, activity)"><Icon :name="activity.isVisible ? 'heroicons:eye-slash' : 'heroicons:eye'" class="h-4 w-4" /></button>
-                    <NuxtLink v-if="activity.type === 'text'" :to="{ path: `/dashboard/courses/${id}/read/${activity.id}`, query: { preview: '1' } }" class="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300" title="Pratinjau materi"><Icon name="heroicons:eye" class="h-3.5 w-3.5" /> Preview</NuxtLink>
-                     <button class="icon-btn" title="Edit activity" @click="startActivity(section.id, activity)"><Icon name="heroicons:pencil" class="h-4 w-4" /></button>
-                    <button v-if="activity.type === 'text'" class="icon-btn" title="Duplikat materi" @click="duplicateActivity(section.id, activity)"><Icon name="heroicons:document-duplicate" class="h-4 w-4" /></button>
-                    <button class="icon-btn" title="Hapus activity" @click="deleteActivity(section.id, activity)"><Icon name="heroicons:trash" class="h-4 w-4" /></button>
-                  </template>
+                  <NuxtLink v-if="canManage && activity.type === 'text'" :to="{ path: `/dashboard/courses/${id}/read/${activity.id}`, query: { preview: '1' } }" class="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300" title="Pratinjau materi"><Icon name="heroicons:eye" class="h-3.5 w-3.5" /> Preview</NuxtLink>
+                  <div v-if="canManage" class="relative">
+                    <button class="icon-btn" :aria-expanded="openMenu === `activity:${activity.id}`" aria-haspopup="menu" title="Menu activity" @click.stop="toggleMenu(`activity:${activity.id}`)"><Icon name="heroicons:ellipsis-vertical" class="h-4 w-4" /></button>
+                    <div v-if="openMenu === `activity:${activity.id}`" class="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800" role="menu" @click.stop>
+                      <button class="menu-item" role="menuitem" @click="openMenu = null; startActivity(section.id, activity)"><Icon name="heroicons:pencil" class="h-4 w-4" /> Edit</button>
+                      <button class="menu-item" role="menuitem" @click="openMenu = null; toggleActivity(section.id, activity)"><Icon :name="activity.isVisible ? 'heroicons:eye-slash' : 'heroicons:eye'" class="h-4 w-4" /> {{ activity.isVisible ? 'Sembunyikan' : 'Tampilkan' }}</button>
+                      <button v-if="activity.type === 'text'" class="menu-item" role="menuitem" @click="openMenu = null; duplicateActivity(section.id, activity)"><Icon name="heroicons:document-duplicate" class="h-4 w-4" /> Duplikat</button>
+                      <button class="menu-item text-red-600 dark:text-red-400" role="menuitem" @click="openMenu = null; deleteActivity(section.id, activity)"><Icon name="heroicons:trash" class="h-4 w-4" /> Hapus</button>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <p v-if="canManage && activity.content" class="mt-3 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">{{ activity.content }}</p>
+              <p v-if="canManage && activity.content" class="mt-3 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">{{ stripHtml(activity.content) }}</p>
             </article>
             <p v-if="!section.activities?.length" class="text-sm text-slate-500 dark:text-slate-400">Belum ada activity.</p>
             <button v-if="canManage" class="w-full rounded-lg border border-dashed border-emerald-300 py-2 text-sm font-semibold text-emerald-600" @click="startActivity(section.id)">+ Tambah Activity</button>
@@ -431,13 +537,13 @@ async function toggleActivity(sectionId: string, activity: any) { await $fetch(`
             <button class="text-xl text-slate-400" @click="selectedActivity = null"><Icon name="heroicons:x-mark" class="h-5 w-5" /></button>
           </div>
           <div v-if="selectedActivity.type === 'link'" class="mt-5 space-y-4">
-            <p class="whitespace-pre-wrap text-sm leading-6 text-slate-700 dark:text-slate-300">{{ selectedActivity.content || 'Link eksternal.' }}</p>
+            <div class="rich-content min-w-0 max-w-full overflow-hidden text-sm leading-6 text-slate-700 dark:text-slate-300" v-html="sanitizeHtml(selectedActivity.content || '<p>Link eksternal.</p>')" />
             <div class="flex flex-wrap gap-2">
               <a :href="selectedActivity.url" :target="selectedActivity.linkOpenInNewTab === false ? '_self' : '_blank'" rel="noopener noreferrer" class="btn-primary inline-flex items-center gap-2"><Icon name="heroicons:arrow-top-right-on-square" class="h-4 w-4" /> Buka link</a>
               <button v-if="isStudent" class="btn-secondary" :disabled="!!selectedActivity.progress?.completedAt" @click="$fetch(`/api/courses/${id}/activities/${selectedActivity.id}/complete`, { method: 'POST' }).then(() => refresh())">{{ selectedActivity.progress?.completedAt ? 'Selesai' : 'Tandai selesai' }}</button>
             </div>
           </div>
-          <div v-if="selectedActivity.type !== 'file' && selectedActivity.type !== 'link'" class="mt-5 whitespace-pre-wrap text-sm leading-6 text-slate-700 dark:text-slate-300">{{ selectedActivity.content || 'Tidak ada konten.' }}</div>
+          <div v-if="selectedActivity.type !== 'file' && selectedActivity.type !== 'link'" class="mt-5 rich-content min-w-0 max-w-full overflow-hidden text-sm leading-6 text-slate-700 dark:text-slate-300" v-html="sanitizeHtml(selectedActivity.content || '<p>Tidak ada konten.</p>')" />
           <div v-if="selectedActivity.type === 'file'" class="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto">
             <template v-for="file in activityAttachments(selectedActivity)" :key="file.url">
               <iframe v-if="isPdfUrl(file.url)" :src="file.url" :title="file.name" class="h-[calc(100vh-9rem)] min-h-[70vh] w-full rounded-lg border border-slate-200 dark:border-slate-600" />
@@ -468,7 +574,15 @@ async function toggleActivity(sectionId: string, activity: any) { await $fetch(`
                 <button class="mt-1 text-xs text-emerald-600 underline" @click="forumReplyTo = post.id">Balas</button>
               </div>
             </div>
-            <textarea v-model="submission" class="field mt-2 h-28" :placeholder="forumReplyTo ? 'Tulis balasan' : selectedActivity.type === 'forum' ? 'Tulis komentar atau pertanyaan' : 'Masukkan link atau jawaban'"></textarea>
+            <template v-if="selectedActivity.type === 'assignment'">
+              <textarea v-model="submission" class="field mt-2 h-20" placeholder="Jawaban teks (opsional)"></textarea>
+              <input v-model="submissionLink" class="field mt-2" placeholder="https:// (opsional)">
+              <div v-if="submissionFiles.length" class="mt-2 space-y-1">
+                <div v-for="file of submissionFiles" :key="file.url" class="flex items-center gap-2 text-xs"><Icon name="heroicons:paper-clip" class="h-3 w-3" /><span class="truncate">{{ file.name }}</span><button type="button" class="text-rose-600 underline" @click="submissionFiles = submissionFiles.filter(f=>f.url !== file.url)">Hapus</button></div>
+              </div>
+              <label class="mt-2 inline-block"><input type="file" multiple class="hidden" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv,.png,.jpg,.jpeg,.gif,.webp,.mp4,.webm" @change="uploadSubmissionFiles"><span class="btn-secondary cursor-pointer">{{ submissionUploading ? 'Mengunggah...' : 'Tambah file' }}</span></label>
+            </template>
+            <textarea v-else v-model="submission" class="field mt-2 h-28" :placeholder="forumReplyTo ? 'Tulis balasan' : selectedActivity.type === 'forum' ? 'Tulis komentar atau pertanyaan' : 'Masukkan link atau jawaban'"></textarea>
             <button class="btn-primary mt-3" @click="selectedActivity.type === 'forum' ? submitForumPost() : submitAssignment">{{ selectedActivity.type === 'forum' ? 'Kirim pesan' : 'Submit' }}</button>
           </div>
         </div>
@@ -488,4 +602,5 @@ async function toggleActivity(sectionId: string, activity: any) { await $fetch(`
 .modal { @apply w-full max-w-lg rounded-xl bg-white dark:bg-slate-800 p-6 shadow-xl; }
 .modal-title { @apply text-lg font-bold text-slate-800 dark:text-slate-100; }
 .modal-actions { @apply mt-5 flex justify-end gap-2; }
+.menu-item { @apply flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700; }
 </style>

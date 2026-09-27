@@ -2,7 +2,7 @@
 // Hitung dan simpan snapshot nilai akhir untuk seluruh siswa pada course.
 // Snapshot lama diganti; feedback guru per siswa dipertahankan.
 import { z } from 'zod'
-import { eq, desc } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { finalGrades } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
 import { requireCourseManager } from '~~/server/utils/courseAccess'
@@ -27,10 +27,11 @@ export default defineEventHandler(async (event) => {
 
   // Simpan feedback yang sudah ada agar tidak hilang saat re-kalkulasi.
   const previous = await db
-    .select({ studentId: finalGrades.studentId, feedback: finalGrades.feedback, version: finalGrades.version })
+    .select({ studentId: finalGrades.studentId, feedback: finalGrades.feedback, publishedAt: finalGrades.publishedAt, version: finalGrades.version })
     .from(finalGrades)
     .where(eq(finalGrades.courseId, courseId))
   const feedbackMap = new Map(previous.filter((p) => p.feedback).map((p) => [p.studentId, p.feedback!]))
+  const publishedMap = new Map(previous.filter((p) => p.publishedAt).map((p) => [p.studentId, p.publishedAt!]))
   const maxVersion = previous.reduce((max, p) => Math.max(max, p.version), 0)
   const nextVersion = maxVersion + 1
 
@@ -48,6 +49,7 @@ export default defineEventHandler(async (event) => {
       componentsJson: JSON.stringify(g.components),
       calculatedAt: now,
       calculatedBy: user.id,
+      publishedAt: publishedMap.get(g.studentId) ?? null,
       version: nextVersion,
     })))
   }

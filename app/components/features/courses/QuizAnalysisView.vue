@@ -4,8 +4,10 @@ import type { ItemAnalysisResult, ItemAnalysisRow } from '~/types/itemAnalysis'
 const route = useRoute()
 const courseId = computed(() => String(route.params.id))
 const quizId = computed(() => String(route.params.activityId))
+const { returnTo } = useCourseReturn(() => `/dashboard/courses/${courseId.value}/quizzes/${quizId.value}`)
 const { data: courseData } = await useFetch<any>(() => `/api/courses/${courseId.value}`)
 const activity = computed(() => courseData.value?.data?.sections?.flatMap((s: any) => s.activities ?? []).find((a: any) => a.id === quizId.value))
+const { items: breadcrumbItems } = useCourseBreadcrumb({ courseId, activityId: quizId, course: () => courseData.value?.data, leaf: () => ({ label: 'Analisis Butir Soal' }) })
 
 const classId = ref('')
 const { data, pending, refresh } = await useFetch<{ data: ItemAnalysisResult }>(() => `/api/courses/${courseId.value}/quizzes/${quizId.value}/analysis`, { query: { classId }, watch: [classId] })
@@ -53,7 +55,7 @@ const riskClass = (status: string) => {
 
 <template>
   <div class="mx-auto max-w-6xl space-y-5">
-    <NuxtLink :to="`/dashboard/courses/${courseId}`" class="text-sm text-slate-500">&larr; Kembali ke course</NuxtLink>
+    <AppBreadcrumb :back-to="returnTo" :items="breadcrumbItems" />
     <header class="flex flex-wrap items-start justify-between gap-3">
       <div>
         <h1 class="text-2xl font-bold text-slate-800 dark:text-slate-100">Analisis Butir Soal</h1>

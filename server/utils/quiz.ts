@@ -1,6 +1,7 @@
 // server/utils/quiz.ts — quiz helpers
 import { eq, and, asc, count, sql } from 'drizzle-orm'
 import { activities, sections, students, courseClasses, questionBank, questionOptions, quizQuestions, quizAttempts, quizAttemptAnswers, activityProgress, quizEvents } from '~~/server/database/schema'
+import { evaluateCompletion } from '~~/server/utils/completion'
 import { db } from '~~/server/utils/db'
 
 /** Throw 404/403 if activity is not a quiz or user lacks access */
@@ -143,7 +144,8 @@ export function canStudentSeeReview(activity: { reviewMode?: string | null; clos
 }
 
 /** Update activity_progress summary for a student+quiz */
-export async function recomputeProgress(activityId: string, studentId: string) {  const attempts = await db.select().from(quizAttempts).where(and(eq(quizAttempts.activityId, activityId), eq(quizAttempts.studentId, studentId))).orderBy(asc(quizAttempts.startedAt))
+export async function recomputeProgress(activityId: string, studentId: string) {
+  const attempts = await db.select().from(quizAttempts).where(and(eq(quizAttempts.activityId, activityId), eq(quizAttempts.studentId, studentId))).orderBy(asc(quizAttempts.startedAt))
   const completed = attempts.filter((a) => ['submitted', 'auto_submitted', 'needs_grading'].includes(a.status))
   let bestScore: number | null = null
   let bestId: string | null = null
@@ -157,9 +159,24 @@ export async function recomputeProgress(activityId: string, studentId: string) {
   const lastScore = last?.score ?? null
   const lastId = last?.id ?? null
 
+  const activity = await db.query.activities.findFirst({ where: eq(activities.id, activityId) })
   const existing = await db.query.activityProgress.findFirst({
     where: and(eq(activityProgress.activityId, activityId), eq(activityProgress.studentId, studentId)),
   })
+
+  const submittedAt = last?.submittedAt ?? existing?.submittedAt ?? null
+
+  // Fase 2: quiz dianggap terlambat bila attempt terakhir lewat batas waktu.
+  const deadline = activity?.closeAt ?? activity?.dueDate ?? null
+  const isLate = !!deadline && !!submittedAt && submittedAt.getTime() > new Date(deadline).getTime()
+
+  // Fase 1: passingScore menentukan apakah quiz terhitung selesai.
+  const decision = evaluateCompletion({
+    activity: activity ?? { type: 'quiz' },
+    progress: { viewedAt: existing?.viewedAt ?? new Date(), submittedAt, completedAt: null, score: bestScore },
+    lastQuizAttempt: { score: bestScore, submittedAt },
+  })
+  const completedAt = decision.done ? (existing?.completedAt ?? submittedAt ?? new Date()) : null
 
   const values = {
     attemptCount: completed.length,
@@ -168,8 +185,10 @@ export async function recomputeProgress(activityId: string, studentId: string) {
     bestAttemptId: bestId,
     lastAttemptId: lastId,
     score: bestScore,
-    submittedAt: last?.submittedAt ?? existing?.submittedAt ?? null,
+    submittedAt,
     gradedAt: completed.some((a) => a.status === 'needs_grading') ? null : existing?.gradedAt ?? null,
+    isLate,
+    completedAt,
   }
 
   if (existing) {

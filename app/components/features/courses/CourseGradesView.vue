@@ -1,5 +1,6 @@
 <template>
   <div class="space-y-6">
+    <AppBreadcrumb :back-to="returnTo" :items="breadcrumbItems" />
     <!-- Konfigurasi Bobot Nilai -->
     <section class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6">
       <header class="flex flex-wrap items-center justify-between gap-4">
@@ -107,6 +108,25 @@
         </button>
       </header>
       <p v-if="calcMessage" class="mt-4 rounded-lg border border-emerald-300 bg-white px-4 py-3 text-sm text-emerald-700 dark:border-emerald-700 dark:bg-slate-800 dark:text-emerald-300">{{ calcMessage }}</p>
+
+      <!-- Fase 3: publish nilai ke siswa -->
+      <div class="mt-5 flex flex-wrap items-center gap-3 border-t border-emerald-200 pt-5 dark:border-emerald-800">
+        <button
+          class="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          :class="published ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-600 hover:bg-emerald-700'"
+          :disabled="publishing"
+          @click="togglePublish"
+        >
+          <Icon :name="published ? 'heroicons:eye-slash' : 'heroicons:eye'" class="h-4 w-4" />
+          {{ publishing ? 'Memproses...' : published ? 'Sembunyikan dari Siswa' : 'Publish Nilai ke Siswa' }}
+        </button>
+        <span class="text-xs text-slate-600 dark:text-slate-400">
+          {{ published
+            ? `Nilai terlihat oleh siswa sejak ${formatDate(publishState.publishedAt)}.`
+            : 'Nilai masih draft. Siswa tidak melihat nilai sampai dipublish.' }}
+        </span>
+        <p v-if="publishError" class="w-full text-xs text-red-600 dark:text-red-400">{{ publishError }}</p>
+      </div>
     </section>
 
     <!-- Snapshot Nilai Akhir -->
@@ -178,6 +198,8 @@ import { GRADE_WEIGHT_PRESETS, type GradeWeightPreset } from '~~/shared/gradeWei
 
 const route = useRoute()
 const courseId = computed(() => String(route.params.id))
+const { returnTo } = useCourseReturn(() => `/dashboard/courses/${courseId.value}`)
+const { items: breadcrumbItems } = useCourseBreadcrumb({ courseId, leaf: () => ({ label: 'Bobot & Nilai' }) })
 
 const { data: weightData, pending: pendingWeights } = await useFetch<{ data: { weights: Record<string, number>; types: string[] } }>(
   () => `/api/courses/${courseId.value}/grade-weights`,
@@ -222,6 +244,27 @@ function applyPreset(preset: GradeWeightPreset) {
 const savingWeight = ref(false)
 const weightsError = ref('')
 const saveMessage = ref('')
+
+const publishing = ref(false)
+const publishError = ref('')
+const publishState = reactive<{ published: boolean; publishedAt: string | null }>({ published: false, publishedAt: null })
+const published = computed(() => publishState.published || snapshots.value.some((r: any) => !!r.publishedAt))
+watch(snapshots, (rows) => {
+  const d = (rows as any[]).find((r) => !!r.publishedAt)
+  publishState.publishedAt = d?.publishedAt ?? null
+  publishState.published = !!d
+}, { immediate: true })
+
+async function togglePublish() {
+  publishing.value = true; publishError.value = ''
+  try {
+    await $fetch(`/api/courses/${courseId.value}/gradebook/publish`, { method: 'POST', body: { scope: 'all', publish: !published.value } })
+    publishState.published = !published.value
+    publishState.publishedAt = !publishState.published ? null : new Date().toISOString()
+    await refreshGrades()
+    saveMessage.value = published.value ? 'Nilai berhasil dipublish ke siswa.' : 'Publish dibatalkan.'
+  } catch (e: unknown) { publishError.value = pesanDariError(e, 'Gagal mempublish nilai') } finally { publishing.value = false }
+}
 
 const calculating = ref(false)
 const gradesError = ref('')

@@ -1,0 +1,11 @@
+node_modules
+.nuxt
+.output
+.git
+.codegraph
+.env
+.env.*
+*.log
+server/database/local.db*
+backups
+public/uploads

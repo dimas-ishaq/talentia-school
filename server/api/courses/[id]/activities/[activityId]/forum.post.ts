@@ -1,8 +1,9 @@
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
-import { activities, courseClasses, forumDiscussions, forumPosts, sections, students } from '~~/server/database/schema'
+import { activities, courseClasses, forumDiscussions, forumPosts, sections, students, activityProgress } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
 import { findCourseOrThrow, isCourseManager } from '~~/server/utils/courseAccess'
+import { evaluateCompletion } from '~~/server/utils/completion'
 
 const schema = z.object({ content: z.string().trim().min(1).max(5000), discussionId: z.string().uuid(), parentId: z.string().uuid().nullable().optional() })
 
@@ -31,5 +32,33 @@ export default defineEventHandler(async (event) => {
   }
   const now = new Date()
   const [post] = await db.insert(forumPosts).values({ id: crypto.randomUUID(), activityId, discussionId: body.discussionId, userId: user.id, studentId, parentId: body.parentId ?? null, content: body.content, createdAt: now, updatedAt: now }).returning()
+
+  // Fase 1: forum selesai sesuai forumCompletionRule + forumRequirePost/Reply.
+  if (studentId) {
+    const mine = await db.query.forumPosts.findMany({ where: and(eq(forumPosts.activityId, activityId), eq(forumPosts.studentId, studentId)) })
+    const postCount = mine.filter((p) => !p.parentId).length
+    const replyCount = mine.filter((p) => !!p.parentId).length
+    const existing = await db.query.activityProgress.findFirst({
+      where: and(eq(activityProgress.activityId, activityId), eq(activityProgress.studentId, studentId)),
+    })
+    const decision = evaluateCompletion({
+      activity,
+      progress: {
+        viewedAt: existing?.viewedAt ?? now,
+        submittedAt: existing?.submittedAt ?? now,
+        completedAt: existing?.completedAt ?? null,
+        score: existing?.score ?? null,
+      },
+      forumStats: { postCount, replyCount },
+    })
+    const values = {
+      viewedAt: existing?.viewedAt ?? now,
+      submittedAt: existing?.submittedAt ?? now,
+      completedAt: decision.done ? (existing?.completedAt ?? now) : null,
+    }
+    if (existing) await db.update(activityProgress).set(values).where(eq(activityProgress.id, existing.id))
+    else await db.insert(activityProgress).values({ id: crypto.randomUUID(), activityId, studentId, ...values })
+  }
+
   return { data: post }
 })

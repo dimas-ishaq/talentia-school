@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { pesanDariError } from '~/composables/useStudents'
 import { compressImage } from '~/utils/imageCompress'
+import { stripHtml } from '~/utils/htmlText'
 import { JAKARTA_INPUT_PATTERN, fromJakartaInput, isValidJakartaInput, toJakartaInput } from '~/utils/datetime'
 import { parseVideoUrl } from '~/utils/video'
 
@@ -8,6 +9,7 @@ const route = useRoute()
 const courseId = computed(() => String(route.params.id))
 const activityId = computed(() => (route.params.activityId ? String(route.params.activityId) : null))
 const isEdit = computed(() => !!activityId.value)
+const { returnTo, withReturnTo } = useCourseReturn(() => `/dashboard/courses/${courseId.value}`)
 
 const { data: courseData } = await useFetch<any>(() => `/api/courses/${courseId.value}`, { key: `activity-form-course-${courseId.value}` })
 
@@ -24,6 +26,7 @@ const sectionId = computed(() => {
   return existingActivity.value?.sectionId ?? ''
 })
 const currentSection = computed(() => sections.value.find((s: any) => s.id === sectionId.value))
+const { items: breadcrumbItems } = useCourseBreadcrumb({ courseId, activityId: () => activityId.value ?? undefined, course, leaf: () => ({ label: isEdit.value ? (form.type === 'quiz' ? 'Edit Quiz' : 'Edit Activity') : 'Aktivitas Baru' }) })
 
 const icons: Record<string, string> = { text: 'heroicons:document-text', file: 'heroicons:paper-clip', video: 'heroicons:video-camera', quiz: 'heroicons:question-mark-circle', assignment: 'heroicons:pencil-square', forum: 'heroicons:chat-bubble-left-right', presentation: 'heroicons:presentation-chart-bar', link: 'heroicons:link' }
 const submitTypes = ['assignment', 'quiz', 'forum']
@@ -75,6 +78,12 @@ const form = reactive({
   forumCompletionRule: 'view' as 'view' | 'post' | 'reply',
   linkCompletionRule: 'view' as 'view' | 'complete',
   linkOpenInNewTab: true,
+  passingScore: null as number | string | null,
+  allowLateSubmission: true,
+  presentationSource: 'file' as 'file' | 'link',
+  presentationFileUrl: '',
+  presentationOriginalUrl: '',
+  presentationPageCount: null as number | null,
 })
 
 const videoInfo = computed(() => form.type === 'video' ? parseVideoUrl(form.url) : null)
@@ -112,6 +121,48 @@ async function uploadVideo(event: Event) {
     form.url = response.data.url
   } catch (error: any) { videoError.value = error?.data?.statusMessage || 'Gagal mengunggah video.' }
   finally { videoFileUploading.value = false; input.value = '' }
+}
+
+const presentationSource = ref<'file' | 'link'>('file')
+const presentationUploading = ref(false)
+const presentationError = ref('')
+const presentationFileUrl = ref('')
+const presentationOriginalUrl = ref('')
+const presentationPageCount = ref<number | null>(null)
+async function uploadPresentation(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  presentationError.value = ''
+  if (!['application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'].includes(file.type)) {
+    presentationError.value = 'Gunakan file .ppt atau .pptx.'
+    input.value = ''
+    return
+  }
+  presentationUploading.value = true
+  try {
+    const body = new FormData()
+    body.append('file', file)
+    const res = await $fetch<{ data: { fileUrl: string | null; originalUrl: string; pageCount: number | null; jobId?: string | null; converter: string; warnings?: string[] } }>('/api/uploads/presentation', { method: 'POST', body })
+    presentationFileUrl.value = res.data.fileUrl || ''
+    presentationOriginalUrl.value = res.data.originalUrl
+    presentationPageCount.value = res.data.pageCount ?? null
+    presentationSource.value = 'file'
+    form.url = ''
+    if (res.data.warnings?.length) presentationError.value = res.data.warnings.join(' ')
+    if (res.data.converter === 'browser') {
+      presentationError.value = presentationError.value || 'PPTX akan ditampilkan langsung di browser tanpa konversi PDF.'
+    } else if (res.data.converter === 'queued') {
+      presentationError.value = presentationError.value || 'File sedang dikonversi ke PDF. Siswa akan melihat slideshow otomatis setelah selesai.'
+    } else if (!res.data.fileUrl) {
+      presentationError.value = presentationError.value || 'Konversi PDF tidak tersedia di server. Siswa akan membuka file via Office Online Viewer.'
+    }
+  } catch (error: any) {
+    presentationError.value = error?.data?.statusMessage || error?.message || 'Gagal mengunggah presentasi.'
+  } finally {
+    presentationUploading.value = false
+    input.value = ''
+  }
 }
 
 // Parsing lampiran dari server
@@ -217,6 +268,12 @@ if (existingActivity.value) {
     forumCompletionRule: existingActivity.value.forumCompletionRule ?? 'view',
     linkCompletionRule: existingActivity.value.linkCompletionRule ?? 'view',
     linkOpenInNewTab: existingActivity.value.linkOpenInNewTab ?? true,
+    passingScore: existingActivity.value.passingScore ?? null,
+    allowLateSubmission: existingActivity.value.allowLateSubmission ?? true,
+    presentationSource: existingActivity.value.presentationSource || 'file',
+    presentationFileUrl: existingActivity.value.presentationFileUrl ?? '',
+    presentationOriginalUrl: existingActivity.value.presentationOriginalUrl ?? '',
+    presentationPageCount: existingActivity.value.presentationPageCount ?? null,
   })
   if (existingActivity.value.type === 'text') isGraded.value = existingActivity.value.points != null
 }
@@ -226,7 +283,7 @@ const errors = computed(() => {
   if (!form.title.trim()) e.title = 'Judul activity wajib diisi'
   else if (form.title.trim().length > 200) e.title = 'Judul maksimal 200 karakter'
   if (form.type === 'text') {
-    const plainContent = form.content.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim()
+    const plainContent = stripHtml(form.content)
     if (!plainContent) e.content = 'Materi bacaan wajib diisi'
     else if (plainContent.length > 10000) e.content = 'Materi maksimal 10.000 karakter'
     if (form.readingMinutes !== '' && form.readingMinutes != null && (Number(form.readingMinutes) < 1 || Number(form.readingMinutes) > 600)) e.readingMinutes = 'Estimasi harus 1–600 menit'
@@ -238,6 +295,10 @@ const errors = computed(() => {
   }
   if (form.type === 'link') {
     if (!/^https?:\/\/\S+$/i.test(form.url.trim())) e.url = 'URL link wajib diawali http:// atau https://'
+  }
+  if (form.type === 'presentation') {
+    if (presentationSource.value === 'link' && !/^https?:\/\/\S+$/i.test(form.url.trim())) e.url = 'URL presentasi wajib diawali http:// atau https://'
+    if (presentationSource.value === 'file' && !presentationFileUrl.value && !presentationOriginalUrl.value) e.url = 'Upload file .ppt/.pptx atau tempel URL presentasi'
   }
   return e
 })
@@ -281,6 +342,13 @@ async function handleSubmit() {
         isVisible: form.isVisible,
         ...(form.type === 'text' ? { status: form.status } : {}),
         ...(form.type === 'link' ? { linkCompletionRule: form.linkCompletionRule, linkOpenInNewTab: form.linkOpenInNewTab } : {}),
+        ...(form.type === 'assignment' ? { allowLateSubmission: form.allowLateSubmission } : {}),
+        ...(form.type === 'presentation' ? {
+          presentationSource: presentationSource.value,
+          presentationFileUrl: presentationFileUrl.value,
+          presentationOriginalUrl: presentationOriginalUrl.value,
+          presentationPageCount: presentationPageCount.value,
+        } : {}),
         ...(isQuiz ? {
           maxPoint: Number(form.maxPoint) || 100,
           durationMinutes: form.durationMinutes === '' || form.durationMinutes == null ? null : Number(form.durationMinutes),
@@ -293,6 +361,7 @@ async function handleSubmit() {
           ...(form.quizPassword.trim() ? { quizPassword: form.quizPassword.trim() } : form.clearPassword ? { quizPassword: '' } : {}),
           scoreVisibility: form.scoreVisibility,
           reviewMode: form.reviewMode,
+          passingScore: form.passingScore === '' || form.passingScore == null ? null : Number(form.passingScore),
           status: form.status,
           forumRequirePost: form.forumRequirePost,
           forumRequireReply: form.forumRequireReply,
@@ -301,7 +370,7 @@ async function handleSubmit() {
       },
     })
     const quizId = isEdit.value ? activityId.value : (saved?.data?.id ?? '')
-    await navigateTo(isQuiz && quizId ? `/dashboard/courses/${courseId.value}/quizzes/${quizId}` : `/dashboard/courses/${courseId.value}`)
+    await navigateTo(isQuiz && quizId ? withReturnTo(`/dashboard/courses/${courseId.value}/quizzes/${quizId}`) : returnTo.value)
   } catch (e: unknown) {
     errorMessage.value = pesanDariError(e, 'Gagal menyimpan activity')
   } finally {
@@ -312,8 +381,8 @@ async function handleSubmit() {
 
 <template>
   <div class="mx-auto space-y-5" :class="form.type === 'quiz' ? 'max-w-5xl' : 'max-w-3xl'">
+    <AppBreadcrumb :back-to="returnTo" :items="breadcrumbItems" />
     <div class="flex items-center gap-3">
-      <NuxtLink :to="`/dashboard/courses/${courseId}`" class="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"><Icon name="heroicons:arrow-left" class="h-4 w-4" /></NuxtLink>
       <div class="min-w-0">
         <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
           {{ isEdit ? (form.type === 'quiz' ? 'Edit Quiz' : 'Edit Activity') : (form.type === 'quiz' ? 'Buat Quiz Baru' : (typeMeta[form.type]?.label ? `Tambah ${typeMeta[form.type]?.label}` : 'Tambah Activity')) }}
@@ -346,7 +415,7 @@ async function handleSubmit() {
         <div>
           <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{{ typeMeta[form.type]?.contentLabel ?? 'Konten / Deskripsi' }} <span v-if="form.type === 'text'" class="text-red-500">*</span></label>
           <RichTextEditor v-if="form.type === 'text'" v-model="form.content" :placeholder="typeMeta[form.type]?.contentPlaceholder ?? ''" />
-          <textarea v-else v-model="form.content" rows="3" :placeholder="typeMeta[form.type]?.contentPlaceholder ?? 'Isi activity'" class="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+          <RichTextEditor v-else v-model="form.content" min-height="min-h-32" :placeholder="typeMeta[form.type]?.contentPlaceholder ?? 'Isi activity'" />
           <p v-if="form.type === 'text'" class="mt-1 text-xs text-slate-400">Materi akan ditampilkan aman kepada siswa setelah sanitasi HTML.</p>
            <p v-if="errors.content" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ errors.content }}</p>
         </div>
@@ -376,7 +445,7 @@ async function handleSubmit() {
           </div>
         </div>
 
-        <div v-if="form.type !== 'quiz' && form.type !== 'text'">
+        <div v-if="form.type !== 'quiz' && form.type !== 'text' && form.type !== 'presentation'">
           <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{{ typeMeta[form.type]?.urlLabel ?? 'URL' }}</label>
           <div class="flex gap-2">
             <input v-model="form.url" type="url" :placeholder="typeMeta[form.type]?.urlPlaceholder ?? 'https://...'" class="h-10 min-w-0 flex-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 px-3 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500">
@@ -389,6 +458,23 @@ async function handleSubmit() {
           <p v-if="errors.url || videoError" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ errors.url || videoError }}</p>
           <VideoPreview v-if="form.type === 'video' && videoInfo" :video="videoInfo" class="mt-3" />
           <p v-if="videoLoading" class="mt-1 text-xs text-slate-400">Mengambil metadata video...</p>
+        </div>
+
+        <div v-if="form.type === 'presentation'" class="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50/40 p-3 dark:border-emerald-800 dark:bg-emerald-900/10">
+          <div class="flex flex-wrap gap-2 text-sm">
+            <label class="flex cursor-pointer items-center gap-2"><input v-model="presentationSource" type="radio" value="file" class="text-emerald-500"> Upload PowerPoint</label>
+            <label class="flex cursor-pointer items-center gap-2"><input v-model="presentationSource" type="radio" value="link" class="text-emerald-500"> URL Google Slides / Canva</label>
+          </div>
+          <template v-if="presentationSource === 'file'">
+            <label class="inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:hover:bg-slate-700">
+              <Icon name="heroicons:arrow-up-tray" class="h-4 w-4" /> {{ presentationUploading ? 'Mengonversi...' : presentationOriginalUrl ? 'Ganti PPT/PPTX' : 'Upload PPT/PPTX' }}
+              <input type="file" accept=".ppt,.pptx,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation" class="hidden" :disabled="presentationUploading" @change="uploadPresentation">
+            </label>
+            <span v-if="presentationOriginalUrl" class="text-xs text-emerald-700 dark:text-emerald-300">File tersimpan{{ presentationPageCount ? ` · ${presentationPageCount} slide` : '' }}.</span>
+          </template>
+          <input v-else v-model="form.url" type="url" placeholder="https://docs.google.com/presentation/... atau https://www.canva.com/..." class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm dark:border-slate-600 dark:bg-slate-800">
+          <p v-if="presentationError || errors.url" class="text-xs text-red-600 dark:text-red-400">{{ presentationError || errors.url }}</p>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Upload akan dikonversi menjadi PDF dan tampil sebagai slideshow. URL eksternal dibuka di tab baru karena browser tidak dapat membaca isi URL pihak ketiga secara langsung.</p>
         </div>
       </section>
 
@@ -416,6 +502,9 @@ async function handleSubmit() {
             <input v-model="form.dueDate" type="text" inputmode="numeric" placeholder="YYYY-MM-DD HH:mm" :pattern="JAKARTA_INPUT_PATTERN" class="h-10 w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 px-3 text-sm font-mono focus:border-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500">
           </div>
         </div>
+        <label v-if="form.type === 'assignment'" class="mt-2 flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+          <input v-model="form.allowLateSubmission" type="checkbox" class="rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"> Izinkan pengumpulan terlambat
+        </label>
         <div class="mt-3 flex flex-wrap gap-x-6 gap-y-2">
           <label class="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
             <input v-model="form.isRequired" type="checkbox" class="rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"> Wajib
@@ -462,6 +551,9 @@ async function handleSubmit() {
           <label class="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Durasi <span class="font-normal normal-case text-slate-400">(menit, kosong = tanpa batas)</span>
             <input v-model="form.durationMinutes" type="number" min="1" class="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:bg-slate-800">
           </label>
+          <label class="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Nilai minimum lulus <span class="font-normal normal-case text-slate-400">(kosong = tanpa ambang)</span>
+            <input v-model="form.passingScore" type="number" min="0" max="100" class="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:bg-slate-800">
+          </label>
           <label class="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 sm:col-span-2"><input v-model="form.hasWindow" type="checkbox" class="rounded text-emerald-500"> Batasi waktu buka/tutup</label>
           <label v-if="form.hasWindow" class="text-xs font-semibold uppercase tracking-wide text-slate-500">Dibuka pada
             <input v-model="form.openAt" type="text" inputmode="numeric" placeholder="YYYY-MM-DD HH:mm" :pattern="JAKARTA_INPUT_PATTERN" class="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-mono dark:border-slate-600 dark:bg-slate-800">
@@ -478,7 +570,7 @@ async function handleSubmit() {
         </div>
         <div>
           <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Aturan / Instruksi Pengerjaan (ditampilkan sebelum mulai)</label>
-          <textarea v-model="form.quizInstructions" rows="3" placeholder="Contoh: Kerjakan sendiri, dilarang membuka catatan, jawab semua soal..." class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200" />
+          <RichTextEditor v-model="form.quizInstructions" min-height="min-h-32" placeholder="Contoh: Kerjakan sendiri, dilarang membuka catatan, jawab semua soal..." />
         </div>
         <div>
           <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Kata Sandi Quiz (opsional)</label>
@@ -511,7 +603,7 @@ async function handleSubmit() {
 
       <!-- Actions -->
       <div class="flex items-center justify-end gap-2">
-        <NuxtLink :to="`/dashboard/courses/${courseId}`" class="flex h-10 items-center rounded-lg px-4 text-sm font-medium text-slate-600 dark:text-slate-300 transition-colors hover:bg-slate-100 dark:hover:bg-slate-700">Batal</NuxtLink>
+        <NuxtLink :to="returnTo" class="inline-flex h-11 items-center rounded-lg border border-slate-200 px-4 text-sm font-semibold text-slate-600 dark:border-slate-600 dark:text-slate-300 transition-colors hover:bg-slate-100 dark:hover:bg-slate-700">Batal</NuxtLink>
         <button type="submit" :disabled="isSubmitting || !formIsValid" class="h-10 rounded-lg bg-emerald-500 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50">
           {{ isSubmitting ? 'Menyimpan...' : (isEdit ? 'Simpan Perubahan' : `Simpan ${typeMeta[form.type]?.label ?? 'Activity'}`) }}
         </button>

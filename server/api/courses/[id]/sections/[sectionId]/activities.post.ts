@@ -5,6 +5,11 @@ import { activities, sections } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
 import { requireCourseManager } from '~~/server/utils/courseAccess'
 
+function assertValidDueDate(v: string | null | undefined): void {
+  if (!v || !String(v).trim()) return
+  if (!Number.isFinite(new Date(String(v).trim()).getTime())) throw createError({ statusCode: 400, statusMessage: 'Tenggat tidak valid (format ISO/WIB YYYY-MM-DD HH:mm).' })
+}
+
 const schema = z.object({
   type: z.enum(['text', 'file', 'video', 'quiz', 'assignment', 'forum', 'presentation', 'link']),
   title: z.string().trim().min(1, 'Judul activity wajib diisi').max(200),
@@ -15,6 +20,8 @@ const schema = z.object({
   attachments: z.array(z.object({ name: z.string().max(200), url: z.string().max(500), kind: z.string().max(30) })).max(20).optional().default([]),
   points: z.number().int().min(0).max(1000).nullable().optional(),
   maxPoint: z.number().min(0).max(10000).optional().default(100),
+  passingScore: z.number().min(0).max(100).nullable().optional(),
+  allowLateSubmission: z.boolean().optional(),
   durationMinutes: z.number().int().min(0).max(1440).nullable().optional(),
   openAt: z.string().trim().nullable().optional(),
   closeAt: z.string().trim().nullable().optional(),
@@ -26,7 +33,7 @@ const schema = z.object({
   status: z.enum(['draft', 'published']).optional().default('draft'),
   scoreVisibility: z.enum(['immediate', 'after_close', 'never']).optional().default('immediate'),
   reviewMode: z.enum(['immediate', 'after_close', 'never']).optional().default('immediate'),
-  dueDate: z.string().trim().optional(),
+  dueDate: z.string().trim().nullable().optional(),
   position: z.number().int().min(0).optional(),
   isRequired: z.boolean().optional().default(true),
   isVisible: z.boolean().optional().default(true),
@@ -35,6 +42,10 @@ const schema = z.object({
   forumCompletionRule: z.enum(['view', 'post', 'reply']).optional().default('view'),
   linkCompletionRule: z.enum(['view', 'complete']).optional().default('view'),
   linkOpenInNewTab: z.boolean().optional().default(true),
+  presentationSource: z.enum(['file', 'link']).optional(),
+  presentationFileUrl: z.string().trim().max(500).optional().default(''),
+  presentationOriginalUrl: z.string().trim().max(500).optional().default(''),
+  presentationPageCount: z.number().int().min(0).nullable().optional(),
 })
 
 export default defineEventHandler(async (event) => {
@@ -48,6 +59,7 @@ export default defineEventHandler(async (event) => {
 
   const body = schema.parse(await readBody(event))
   if (body.type === 'link' && !/^https?:\/\/\S+$/i.test(body.url)) throw createError({ statusCode: 400, statusMessage: 'URL link harus diawali http:// atau https://' })
+  assertValidDueDate(body.dueDate)
   if (body.type === 'quiz') {
     if (body.maxPoint < 1) throw createError({ statusCode: 400, statusMessage: 'Nilai maksimum quiz minimal 1' })
     if (body.durationMinutes != null && body.durationMinutes < 1) throw createError({ statusCode: 400, statusMessage: 'Durasi quiz minimal 1 menit' })
@@ -71,6 +83,8 @@ export default defineEventHandler(async (event) => {
     attachments: body.attachments.length ? JSON.stringify(body.attachments) : null,
     points: body.points ?? null,
     maxPoint: body.maxPoint ?? 100,
+    passingScore: body.type === 'quiz' ? body.passingScore ?? null : null,
+    allowLateSubmission: body.type === 'assignment' ? body.allowLateSubmission ?? true : false,
     durationMinutes: body.durationMinutes ?? null,
     openAt: body.openAt || null,
     closeAt: body.closeAt || null,
@@ -92,6 +106,10 @@ export default defineEventHandler(async (event) => {
     forumCompletionRule: body.type === 'forum' ? body.forumCompletionRule : 'view',
     linkCompletionRule: body.type === 'link' ? body.linkCompletionRule : 'view',
     linkOpenInNewTab: body.type === 'link' ? body.linkOpenInNewTab : true,
+    presentationSource: body.type === 'presentation' ? body.presentationSource ?? null : null,
+    presentationFileUrl: body.type === 'presentation' ? body.presentationFileUrl || null : null,
+    presentationOriginalUrl: body.type === 'presentation' ? body.presentationOriginalUrl || null : null,
+    presentationPageCount: body.type === 'presentation' ? body.presentationPageCount ?? null : null,
   })
 
   return { success: true, data: { id: activityId } }

@@ -1,28 +1,46 @@
 <template>
   <div class="space-y-6">
     <header class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6">
-      <NuxtLink :to="`/dashboard/courses/${courseId}`" class="mb-3 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400">
-        <Icon name="heroicons:arrow-left" class="h-4 w-4" /> Kembali ke course
-      </NuxtLink>
+      <AppBreadcrumb :back-to="returnTo" :items="breadcrumbPending" />
       <h1 class="text-xl font-bold text-slate-800 dark:text-slate-100">Tugas Perlu Dikoreksi</h1>
       <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Daftar submission yang memerlukan penilaian (assignment & forum).</p>
     </header>
+
+    <div v-if="error" class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">Gagal memuat antrian. <button class="underline" @click="refresh()">Coba lagi</button></div>
 
     <section v-if="pendingList.length === 0" class="rounded-xl border border-slate-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-900/10 p-6">
       <p class="text-sm text-yellow-700 dark:text-yellow-300">Tidak ada tugas yang perlu dikoreksi.</p>
     </section>
 
-    <table v-else class="min-w-full overflow-hidden rounded-xl border bg-white text-sm dark:border-slate-700 dark:bg-slate-800">
+    <section v-if="pendingList.length" class="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+      <label class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Kelas
+        <select v-model="filters.kelas" class="mt-1 block h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm dark:border-slate-600 dark:bg-slate-700">
+          <option value="all">Semua kelas</option>
+          <option v-for="c in classOptions" :key="c" :value="c">{{ c }}</option>
+        </select>
+      </label>
+      <label class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Ketepatan
+        <select v-model="filters.terlambat" class="mt-1 block h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm dark:border-slate-600 dark:bg-slate-700">
+          <option value="all">Semua</option>
+          <option value="ontime">Tepat waktu</option>
+          <option value="late">Terlambat</option>
+        </select>
+      </label>
+      <span class="ml-auto text-xs text-slate-400">{{ filteredList.length }} dari {{ pendingList.length }} submission</span>
+    </section>
+
+    <table v-if="pendingList.length" class="min-w-full overflow-hidden rounded-xl border bg-white text-sm dark:border-slate-700 dark:bg-slate-800">
       <thead class="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-700/40">
         <tr>
           <th class="px-4 py-3 font-semibold">Siswa</th>
           <th class="px-4 py-3 font-semibold">Aktivitas</th>
+          <th class="px-4 py-3 font-semibold">Status</th>
           <th class="px-4 py-3 font-semibold">Submission</th>
           <th class="px-4 py-3"></th>
         </tr>
       </thead>
       <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
-        <tr v-for="item in pendingList" :key="item.activityId">
+        <tr v-for="item in filteredList" :key="`${item.activityId}-${item.studentId}`">
           <td class="px-4 py-3 align-top">
             <div class="font-medium text-slate-800 dark:text-slate-200">{{ item.studentName }}</div>
             <div class="text-xs text-slate-400 dark:text-slate-500">{{ item.nis }} · {{ item.className }}</div>
@@ -32,12 +50,21 @@
             <div class="text-xs text-slate-400 dark:text-slate-500 mt-1">{{ item.sectionTitle }}: {{ item.title }}</div>
           </td>
           <td class="px-4 py-3 align-top">
-            <div class="max-w-md truncate rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-700/40 dark:text-slate-300">
-              {{ item.submission || 'Tidak ada' }}
+            <span v-if="item.isLate" class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">Terlambat</span>
+            <span v-else class="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">Tepat waktu</span>
+          </td>
+          <td class="px-4 py-3 align-top">
+            <div class="max-w-md space-y-1 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-700/40 dark:text-slate-300">
+              <p v-if="item.submission" class="whitespace-pre-wrap break-words">{{ item.submission }}</p>
+              <p v-if="item.submissionLink"><a :href="item.submissionLink" target="_blank" rel="noopener" class="text-emerald-600 underline">{{ item.submissionLink }}</a></p>
+              <p v-for="f in item.submissionFiles ?? []" :key="f.url"><a :href="f.url" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-emerald-600 underline"><Icon name="heroicons:paper-clip" class="h-3 w-3" />{{ f.name }}</a></p>
+              <p v-if="!item.submission && !item.submissionLink && !item.submissionFiles?.length" class="text-slate-400">Tidak ada</p>
+              <p v-if="item.returnReason" class="rounded bg-orange-50 px-2 py-1 text-[11px] text-orange-700 dark:bg-orange-900/20 dark:text-orange-300">Revisi: {{ item.returnReason }}</p>
             </div>
           </td>
           <td class="px-4 py-3 align-top text-right">
-            <button class="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-600" @click="openModal(item)">Koreksi</button>
+            <button class="mr-1 inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-600" @click="openModal(item)">Koreksi</button>
+            <button class="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-300" @click="openRevision(item)">Minta Revisi</button>
           </td>
         </tr>
       </tbody>
@@ -47,6 +74,21 @@
     <div v-if="gradeError" class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">{{ gradeError }}</div>
 
     <!-- Modal Koreksi -->
+    <!-- Modal Revisi -->
+    <Teleport to="body">
+      <div v-if="revisionOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" @click.self="revisionOpen = false">
+        <div class="w-full max-w-lg rounded-xl bg-white p-6 dark:bg-slate-800">
+          <h2 class="text-base font-bold text-slate-800 dark:text-slate-100">Minta revisi: {{ revisionItem?.title }}</h2>
+          <p class="mt-1 text-xs text-slate-500">Alasan akan terlihat siswa di halaman tugas.</p>
+          <textarea v-model="revisionReason" rows="4" placeholder="Contoh: Harap lengkapi sumber dan perbaiki format PDF." class="mt-3 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"></textarea>
+          <div class="mt-4 flex justify-end gap-2">
+            <button class="rounded-lg border border-slate-200 px-4 py-2 text-sm dark:border-slate-600" @click="revisionOpen = false">Batal</button>
+            <button class="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50" :disabled="revisionSaving" @click="askRevision">{{ revisionSaving ? 'Mengirim...' : 'Kirim Revisi' }}</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <Teleport to="body">
       <div v-if="modal.open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" @click.self="modal.open = false">
         <div class="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-6 dark:bg-slate-800">
@@ -56,6 +98,12 @@
               <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">{{ modal.item?.studentName }} · {{ modal.item?.submission ? 'Submission tersedia' : 'Tanpa submission' }}</p>
             </div>
             <button class="text-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-300" @click="closeModal"><Icon name="heroicons:x-mark" class="h-5 w-5" /></button>
+          </div>
+
+          <div v-if="modal.item" class="mt-3 space-y-2 rounded-lg bg-slate-50 px-3 py-2 text-xs dark:bg-slate-700/40">
+            <p v-if="modal.item.submission" class="whitespace-pre-wrap break-words text-slate-600 dark:text-slate-300">{{ modal.item.submission }}</p>
+            <p v-if="modal.item.submissionLink"><a :href="modal.item.submissionLink" target="_blank" rel="noopener" class="text-emerald-600 underline">{{ modal.item.submissionLink }}</a></p>
+            <p v-for="f in modal.item.submissionFiles ?? []" :key="f.url"><a :href="f.url" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-emerald-600 underline"><Icon name="heroicons:paper-clip" class="h-3 w-3" />{{ f.name }}</a></p>
           </div>
 
           <div v-if="modal.item && !modal.processing" class="mt-4 space-y-3">
@@ -80,8 +128,12 @@
 </template>
 
 <script setup lang="ts">
+import { pesanDariError } from '~/composables/useStudents'
+
 const route = useRoute()
 const courseId = computed(() => String(route.params.id))
+const { returnTo } = useCourseReturn(() => `/dashboard/courses/${courseId.value}`)
+const { items: breadcrumbPending } = useCourseBreadcrumb({ courseId, leaf: () => ({ label: 'Tugas Perlu Dikoreksi' }) })
 const { user } = useAuth()
 const canManage = computed(() => user.value?.role === 'teacher' || user.value?.role === 'admin')
 
@@ -93,6 +145,18 @@ const modal = reactive({ open: false, item: null as any, processing: false })
 const scoreForm = reactive({ score: '' as number | '', feedback: '' as string })
 const gradeMessage = ref('')
 const gradeError = ref('')
+const revisionReason = ref('')
+const revisionItem = ref<any>(null)
+const revisionOpen = ref(false)
+const revisionSaving = ref(false)
+const filters = reactive({ kelas: 'all', terlambat: 'all' })
+const classOptions = computed(() => [...new Set(pendingList.value.map((i: any) => i.className).filter(Boolean))].sort())
+const filteredList = computed(() => pendingList.value.filter((i: any) => {
+  if (filters.kelas !== 'all' && i.className !== filters.kelas) return false
+  if (filters.terlambat === 'late' && !i.isLate) return false
+  if (filters.terlambat === 'ontime' && i.isLate) return false
+  return true
+}))
 
 function openModal(item: any) {
   if (!canManage.value) return
@@ -112,7 +176,7 @@ function closeModal() {
 async function submitGrade() {
   gradeMessage.value = ''
   gradeError.value = ''
-  if (!modal.item || scoreForm.score == null || Number(scoreForm.score) <= 0) {
+  if (!modal.item || scoreForm.score == null || scoreForm.score === '' || Number(scoreForm.score) < 0) {
     gradeError.value = 'Masukkan nilai yang valid.'
     return
   }
@@ -126,10 +190,28 @@ async function submitGrade() {
     closeModal()
     gradeMessage.value = 'Penilaian berhasil disimpan.'
   } catch (e: unknown) {
-    gradeError.value = e instanceof Error ? e.message : 'Gagal menyimpan penilaian'
+    gradeError.value = pesanDariError(e, 'Gagal menyimpan penilaian')
   } finally {
     modal.processing = false
   }
+}
+function openRevision(item: any) { revisionItem.value = item; revisionReason.value = ''; revisionOpen.value = true; gradeError.value = ''; gradeMessage.value = '' }
+async function askRevision() {
+  if (!revisionItem.value) return
+  gradeError.value = ''; gradeMessage.value = ''
+  if (revisionReason.value.trim().length < 3) {
+    gradeError.value = 'Isi alasan revisi minimal 3 karakter.'
+    return
+  }
+  revisionSaving.value = true
+  try {
+    await $fetch(`/api/courses/${courseId.value}/activities/${revisionItem.value.activityId}/return`, { method: 'POST', body: { studentId: revisionItem.value.studentId, reason: revisionReason.value.trim() } })
+    await refresh()
+    revisionOpen.value = false
+    revisionItem.value = null
+    gradeMessage.value = 'Revisi diminta. Nilai lama dibersihkan saat siswa kirim ulang.'
+  } catch (e: unknown) { gradeError.value = pesanDariError(e, 'Gagal meminta revisi') }
+  finally { revisionSaving.value = false }
 }
 </script>
 

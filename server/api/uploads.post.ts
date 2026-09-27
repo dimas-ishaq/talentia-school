@@ -11,7 +11,7 @@ const KIND: Record<string, string> = { '.pdf': 'pdf', '.doc': 'document', '.docx
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
-  if (!['admin', 'org_admin', 'owner', 'teacher'].includes(user.role)) throw createError({ statusCode: 403, statusMessage: 'Hanya guru atau admin yang dapat mengunggah file' })
+  if (!['admin', 'org_admin', 'owner', 'teacher', 'student'].includes(user.role)) throw createError({ statusCode: 403, statusMessage: 'Akun tidak dapat mengunggah file' })
   const form = await readMultipartFormData(event)
   const filePart = form?.find((part) => part.name === 'file' && part.filename)
   if (!filePart) throw createError({ statusCode: 400, statusMessage: 'File tidak ditemukan pada request' })

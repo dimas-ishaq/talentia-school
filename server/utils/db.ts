@@ -37,6 +37,12 @@ if (hasTable('attendance') && !hasColumn('attendance', 'course_id')) sqlite.exec
 if (hasTable('attendance') && !hasColumn('attendance', 'activity_note')) sqlite.exec('ALTER TABLE attendance ADD COLUMN activity_note text')
 if (hasTable('attendance') && !hasColumn('attendance', 'learning_note')) sqlite.exec('ALTER TABLE attendance ADD COLUMN learning_note text')
 if (hasTable('attendance')) sqlite.exec('CREATE UNIQUE INDEX IF NOT EXISTS attendance_student_course_date_idx ON attendance (student_id, course_id, date)')
+
+// Presentation activity columns (file upload + PPTX/PPT conversion).
+if (hasTable('activities') && !hasColumn('activities', 'presentation_source')) sqlite.exec("ALTER TABLE activities ADD COLUMN presentation_source text")
+if (hasTable('activities') && !hasColumn('activities', 'presentation_file_url')) sqlite.exec('ALTER TABLE activities ADD COLUMN presentation_file_url text')
+if (hasTable('activities') && !hasColumn('activities', 'presentation_original_url')) sqlite.exec('ALTER TABLE activities ADD COLUMN presentation_original_url text')
+if (hasTable('activities') && !hasColumn('activities', 'presentation_page_count')) sqlite.exec('ALTER TABLE activities ADD COLUMN presentation_page_count integer')
 if (!hasTable('organization_members')) {
   sqlite.exec(`CREATE TABLE organization_members (organization_id text NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE, role text NOT NULL, status text NOT NULL DEFAULT 'active', PRIMARY KEY (organization_id, user_id))`)
 }

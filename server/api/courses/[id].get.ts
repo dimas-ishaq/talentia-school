@@ -70,7 +70,7 @@ export default defineEventHandler(async (event) => {
   const averageScore = courseScores.length ? courseScores.reduce((sum, row) => sum + (row.score ?? 0), 0) / courseScores.length : null
 
   // Student progress per activity, only for current student
-  let studentProgressMap = new Map<string, { viewedAt: number | null; submittedAt: number | null; completedAt: number | null; score: number | null; submission: string | null }>()
+  let studentProgressMap = new Map<string, { viewedAt: number | null; submittedAt: number | null; completedAt: number | null; score: number | null; submission: string | null; submissionFiles: { name: string; url: string }[]; submissionLink: string | null; feedback: string | null; isLate: boolean; returnedAt: number | null; returnReason: string | null; scorePublishedAt: number | null; gradedAt: number | null }>()
   if (user.role === 'student') {
     const student = await db.query.students.findFirst({
       where: eq(students.userId, user.id),
@@ -81,13 +81,29 @@ export default defineEventHandler(async (event) => {
         .select()
         .from(activityProgress)
         .where(eq(activityProgress.studentId, student.id))
+      const parseF = (raw: unknown): { name: string; url: string }[] => {
+        try {
+          const s = typeof raw === 'string' ? raw : String(raw ?? '')
+          if (!s) return []
+          const parsed = JSON.parse(s)
+          return Array.isArray(parsed) ? parsed.filter((x: any) => x?.url) : []
+        } catch { return [] }
+      }
       for (const p of progressRows) {
         studentProgressMap.set(p.activityId, {
-          viewedAt: p.viewedAt?.getTime() ?? null,
-          submittedAt: p.submittedAt?.getTime() ?? null,
-          completedAt: p.completedAt?.getTime() ?? null,
-          score: p.score,
-          submission: p.submission,
+          viewedAt: (p.viewedAt as Date | null)?.getTime() ?? null,
+          submittedAt: (p.submittedAt as Date | null)?.getTime() ?? null,
+          completedAt: (p.completedAt as Date | null)?.getTime() ?? null,
+          score: p.score as number | null,
+          submission: (p.submission as string | null) ?? null,
+          submissionFiles: parseF((p as any).submissionFiles),
+          submissionLink: (p as any).submissionLink ?? null,
+          feedback: (p.feedback as string | null) ?? null,
+          isLate: !!(p as any).isLate,
+          returnedAt: (p.returnedAt as Date | null)?.getTime() ?? null,
+          returnReason: (p.returnReason as string | null) ?? null,
+          scorePublishedAt: (p.scorePublishedAt as Date | null)?.getTime() ?? null,
+          gradedAt: (p.gradedAt as Date | null)?.getTime() ?? null,
         })
       }
     }
@@ -112,15 +128,19 @@ export default defineEventHandler(async (event) => {
         activities: visibleActs.map((a) => {
           // Jangan pernah bocorkan hash kata sandi ke client.
           const { quizPassword, ...rest } = a
+          const progress = studentProgressMap.get(a.id) ?? null
+          // Fase 3: nilai activity hanya terlihat setelah guru publish.
+          // Quiz tetap pakai scoreVisibility (setelah ditutup / tidak pernah).
+          const scoreVisible = a.type === 'quiz'
+            ? canStudentSeeScore(a)
+            : !progress || progress.score == null || !!progress.scorePublishedAt
           return {
             ...rest,
             hasPassword: !!quizPassword,
-            progress: studentProgressMap.get(a.id) ?? null,
-            // Siswa hanya boleh melihat nilai sesuai pengaturan quiz
-            ...(isStudent && a.type === 'quiz' && !canStudentSeeScore(a)
-              ? { progress: studentProgressMap.get(a.id) ? { ...studentProgressMap.get(a.id)!, score: null } : null }
-              : {}),
-          }
+            progress: isStudent && progress && !scoreVisible
+              ? { ...progress, score: null, feedback: null }
+              : progress,
+          } as any
         }),
       }
     }),

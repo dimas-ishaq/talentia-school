@@ -1,4 +1,4 @@
-// server/database/seed.ts
+// server/database/seed.ts — DEV ONLY, data demo. Jangan jalankan di produksi.
 import bcrypt from 'bcrypt'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import Database from 'better-sqlite3'
@@ -34,6 +34,9 @@ function generateSiswaNames(count: number) {
 }
 
 async function seed() {
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_DEMO_SEED !== 'true') {
+    throw new Error('seed.ts diblokir di NODE_ENV=production. Set ALLOW_DEMO_SEED=true bila benar-benar ingin seed demo.')
+  }
   console.log('🌱 Seeding...')
 
   const organizationId = 'org_demo'

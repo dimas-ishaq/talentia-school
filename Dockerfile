@@ -21,7 +21,7 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store npx nuxt build
 FROM node:22-slim AS production
 WORKDIR /app
 
-# Install LibreOffice headless untuk konversi PPT/PPTX → PDF
+# LibreOffice headless untuk konversi PPT/PPTX → PDF
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
      libreoffice-impress \
@@ -37,12 +37,17 @@ ENV NUXT_HOST=0.0.0.0
 ENV NUXT_PORT=3000
 
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
+RUN npm prune --omit=dev
 COPY --from=builder /app/.output ./.output
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/server ./server
 COPY --from=builder /app/drizzle ./drizzle
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
-COPY --from=builder /app/package.json ./package.json
+# drizzle-postgresql ada bila project pernah push dengan Postgres; copy bila ada
+COPY --from=builder /app/drizzle-postgresql ./drizzle-postgresql
 
+RUN chown -R node:node /app
+USER node
 EXPOSE 3000
 CMD ["node", ".output/server/index.mjs"]

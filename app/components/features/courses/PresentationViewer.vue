@@ -90,8 +90,9 @@ function cleanup() {
     try { renderTask.cancel() } catch { /* ignore */ }
     renderTask = null
   }
+  // ponytail: pdfjs-dist v6 tidak mendeklarasikan destroy() di tipe meski runtime ada; cast lokal, hapus saat upstream memperbaiki tipenya.
   if (pdfDoc.value) {
-    try { void pdfDoc.value.destroy() } catch { /* ignore */ }
+    try { void (pdfDoc.value as unknown as { destroy: () => Promise<void> }).destroy() } catch { /* ignore */ }
   }
   pdfDoc.value = null
   totalPages.value = 0

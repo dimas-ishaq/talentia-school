@@ -17,7 +17,11 @@ export async function sendPasswordResetEmail(email: string) {
   })
 
   if (!config.smtpHost || !config.smtpUser || !config.smtpPassword) {
-    console.warn(`[password-reset] SMTP belum dikonfigurasi; token: ${token}`)
+    if (process.env.NODE_ENV === 'production') {
+      console.warn('[password-reset] SMTP belum dikonfigurasi; token disimpan, tidak dicetak ke log produksi')
+    } else {
+      console.warn(`[password-reset] SMTP belum dikonfigurasi; token (dev only): ${token}`)
+    }
     return
   }
   const transport = nodemailer.createTransport({

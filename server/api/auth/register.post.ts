@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm'
 import { db } from '~~/server/utils/db'
 import { organizations, organizationMembers, users } from '~~/server/database/schema'
 import { registerSchema } from '~~/shared/schemas/auth'
+import { enforceAuthRateLimit, authRateLimitKey } from '~~/server/utils/authRateLimit'
 
 const bodySchema = registerSchema
 
@@ -17,6 +18,7 @@ function slugify(value: string) {
 }
 
 export default defineEventHandler(async (event) => {
+  enforceAuthRateLimit(`register:${authRateLimitKey(event)}`, 5, 60 * 60_000)
   const body = await readValidatedBody(event, bodySchema.parse)
 
   if (body.password !== body.confirmPassword) {

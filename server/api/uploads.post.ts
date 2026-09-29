@@ -4,9 +4,9 @@ import { extname, join } from 'node:path'
 import { getUploadMaxBytes } from '~~/server/utils/uploadSettings'
 import { writeAuditLog } from '~~/server/utils/audit'
 
-const ALLOWED_EXT = new Set(['.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.txt', '.csv', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.mp4', '.webm'])
+const ALLOWED_EXT = new Set(['.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.txt', '.csv', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.mp4', '.webm', '.mov'])
 const VIDEO_EXT = new Set(['.mp4', '.webm', '.mov'])
-const ALLOWED_MIME = new Set(['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'text/plain', 'text/csv', 'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'video/mp4', 'video/webm'])
+const ALLOWED_MIME = new Set(['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'text/plain', 'text/csv', 'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'video/mp4', 'video/webm', 'video/quicktime'])
 const KIND: Record<string, string> = { '.pdf': 'pdf', '.doc': 'document', '.docx': 'document', '.ppt': 'presentation', '.pptx': 'presentation', '.xls': 'spreadsheet', '.xlsx': 'spreadsheet', '.txt': 'text', '.csv': 'spreadsheet', '.png': 'image', '.jpg': 'image', '.jpeg': 'image', '.gif': 'image', '.webp': 'image', '.mp4': 'video', '.webm': 'video', '.mov': 'video' }
 
 export default defineEventHandler(async (event) => {

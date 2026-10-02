@@ -48,6 +48,17 @@ async function api(cookie: string, path: string) {
   return { status: res.status, body }
 }
 
+async function post(path: string, body: unknown) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  let data: any = null
+  try { data = await res.json() } catch {}
+  return { status: res.status, body: data }
+}
+
 const PASSWORD = 'RahasiaKuat123!'
 
 async function main() {
@@ -251,6 +262,25 @@ async function main() {
       assert.equal(res.status, 200, `status ${res.status}`)
       const ids: string[] = (res.body?.data ?? []).map((r: any) => r.studentId ?? r.id ?? '')
       assert.equal(ids.includes('siswa_b'), false, `tidak boleh ada siswa_b di summary org_a`)
+    })
+    await check('POST /api/auth/register membuat org suspended (tak bisa dipakai tanpa persetujuan)', async () => {
+      const email = `baru.${Date.now()}@sekolah.test`
+      const res = await post('/api/auth/register', {
+        organizationName: 'Sekolah Baru',
+        username: 'admin_baru',
+        email,
+        password: PASSWORD,
+        confirmPassword: PASSWORD,
+      })
+      assert.equal(res.status, 201, `register harus 201, dapat ${res.status} ${JSON.stringify(res.body)}`)
+      const verifyDb = new Database(DB_PATH, { readonly: true })
+      const org = verifyDb.prepare('SELECT status FROM organizations WHERE id = (SELECT organization_id FROM users WHERE email = ?)').get(email) as { status?: string } | undefined
+      verifyDb.close()
+      assert.ok(org, 'organisasi baru harus ada')
+      assert.equal(org.status, 'suspended', `status org baru harus suspended, dapat ${org.status}`)
+      // Akun suspended tidak boleh login/akses tenant
+      const badLogin = await post('/api/auth/login', { email, password: PASSWORD })
+      assert.equal(badLogin.status, 403, `login akun suspended harus 403, dapat ${badLogin.status} ${JSON.stringify(badLogin.body)}`)
     })
     await check('GET /api/organizations/billing menghitung per org is_active', async () => {
       const res = await api(cookieA, '/api/organizations/billing')

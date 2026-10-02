@@ -2,7 +2,7 @@
 import bcrypt from "bcrypt";
 import { eq } from "drizzle-orm";
 import { loginSchema } from '~~/shared/schemas/auth'
-import { users, students, teachers } from "~~/server/database/schema";
+import { users, students, teachers, organizations } from "~~/server/database/schema";
 import { ensureOrganization } from '~~/server/utils/db'
 import { isProfileComplete } from "~~/server/utils/profile";
 import type { H3Event } from 'h3'
@@ -68,7 +68,17 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  attempts.delete(key)
+  // Pilot terkelola: akun org suspended/cancelled tidak boleh login.
+  // Tenant guard di requireOrganization juga menolak status ini (lapis kedua).
+  if (user.organizationId) {
+    const org = await db.query.organizations.findFirst({
+      where: eq(organizations.id, user.organizationId),
+      columns: { status: true },
+    })
+    if (org && (org.status === 'suspended' || org.status === 'cancelled')) {
+      throw createError({ statusCode: 403, statusMessage: 'Akun sekolah Anda belum aktif. Hubungi operator.' })
+    }
+  }
   const organizationId = await ensureOrganization(user)
   await writeAuditLog({ userId: user.id, action: 'auth.login_success', target: user.id, metadata: { ip: key } })
   const profileComplete = await isProfileComplete(user)

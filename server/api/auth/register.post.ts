@@ -39,31 +39,28 @@ export default defineEventHandler(async (event) => {
 
   const hashedPassword = await bcrypt.hash(body.password, 10)
 
-  const created = await db.transaction(async (tx) => {
-    const userId = crypto.randomUUID()
-    const organizationId = crypto.randomUUID()
+  const userId = crypto.randomUUID()
+  const organizationId = crypto.randomUUID()
 
-    // Slug unik: tambah suffix bila sudah dipakai.
-    const baseSlug = slugify(body.organizationName)
-    let slug = baseSlug
-    for (let i = 2; i < 50; i++) {
-      const clash = await tx.query.organizations.findFirst({ where: eq(organizations.slug, slug), columns: { id: true } })
-      if (!clash) break
-      slug = `${baseSlug}-${i}`
-    }
+  // Slug unik: tambah suffix bila sudah dipakai.
+  const baseSlug = slugify(body.organizationName)
+  let slug = baseSlug
+  for (let i = 2; i < 50; i++) {
+    const clash = await db.query.organizations.findFirst({ where: eq(organizations.slug, slug), columns: { id: true } })
+    if (!clash) break
+    slug = `${baseSlug}-${i}`
+  }
 
-    await tx.insert(organizations).values({ id: organizationId, name: body.organizationName.trim(), slug, status: 'trial' })
-
-    const [newUser] = await tx
-      .insert(users)
-      .values({ id: userId, organizationId, email, name: username, role: 'admin', password: hashedPassword })
-      .returning()
-    if (!newUser) throw createError({ statusCode: 500, statusMessage: 'Gagal membuat akun' })
-
-    await tx.insert(organizationMembers).values({ organizationId, userId, role: 'owner', status: 'active' })
-
-    return newUser
-  })
+  // Pilot terkelola: org baru suspended, operator mengaktifkan manual setelah verifikasi.
+  // ponytail: tanpa transaction untuk kompatibilitas better-sqlite3 (sync txn) + postgres;
+  // konsisten atomik saat butuh: migrasi ke driver-specific txn.
+  await db.insert(organizations).values({ id: organizationId, name: body.organizationName.trim(), slug, status: 'suspended' })
+  const [created] = await db
+    .insert(users)
+    .values({ id: userId, organizationId, email, name: username, role: 'admin', password: hashedPassword })
+    .returning()
+  if (!created) throw createError({ statusCode: 500, statusMessage: 'Gagal membuat akun' })
+  await db.insert(organizationMembers).values({ organizationId, userId, role: 'owner', status: 'active' })
 
   setResponseStatus(event, 201)
   return {
@@ -71,4 +68,3 @@ export default defineEventHandler(async (event) => {
     user: { id: created.id, email: created.email, name: created.name, role: 'owner' },
   }
 })
-

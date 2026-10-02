@@ -26,7 +26,8 @@ async function handleSubmit() {
   isLoading.value = true
   try {
     await $fetch('/api/auth/register', { method: 'POST', body: formRegister.value })
-    await navigateTo('/auth/login')
+    serverError.value = 'Pendaftaran diterima. Akun sekolah masih menunggu persetujuan operator — Anda belum bisa login. Hubungi operator.'
+    return
   } catch (e: any) {
     const field = e.data?.data?.field
     const message = e.data?.statusMessage ?? 'Registrasi gagal. Coba lagi.'

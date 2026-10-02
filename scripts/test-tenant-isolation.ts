@@ -84,8 +84,15 @@ async function main() {
   const insStudent = raw.prepare(
     'INSERT INTO students (id, organization_id, user_id, nis, gender, is_active, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)',
   )
+  const insClass = raw.prepare(
+    'INSERT INTO classes (id, organization_id, name, level, is_active, created_at) VALUES (?, ?, ?, ?, 1, ?)',
+  )
+  insClass.run('class_a', 'org_a', 'X-A', 10, 1)
+  insClass.run('class_b', 'org_b', 'X-B', 10, 2)
   insStudent.run('siswa_a', 'org_a', 'u_siswa_a', 'NIS-A-1', 'L', 1)
   insStudent.run('siswa_b', 'org_b', 'u_siswa_b', 'NIS-B-1', 'P', 1)
+  raw.prepare('UPDATE students SET class_id = ? WHERE id = ?').run('class_a', 'siswa_a')
+  raw.prepare('UPDATE students SET class_id = ? WHERE id = ?').run('class_b', 'siswa_b')
   const insSubject = raw.prepare(
     'INSERT INTO subjects (id, organization_id, code, name, is_active, created_at) VALUES (?, ?, ?, ?, 1, ?)',
   )

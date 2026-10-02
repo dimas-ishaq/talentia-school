@@ -1,10 +1,10 @@
 // server/api/calendar/[id].patch.ts
 // PATCH /api/calendar/:id — edit agenda akademik (admin-only).
 import { z } from 'zod'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { db } from '~~/server/utils/db'
 import { calendarEvents } from '~~/server/database/schema'
-import { requireAdmin } from '~~/server/utils/requireAdmin'
+import { requireOrganizationAdmin } from '~~/server/utils/tenant'
 import { CALENDAR_EVENT_TYPES, EVENT_TYPE_META, isValidDateString } from '~~/server/utils/calendar'
 
 const dateString = z.string().refine(isValidDateString, 'Format tanggal harus YYYY-MM-DD valid')
@@ -23,7 +23,7 @@ const schema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
-  await requireAdmin(event)
+  const { organization } = await requireOrganizationAdmin(event)
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, statusMessage: 'ID tidak valid' })
 
@@ -32,7 +32,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: parsed.error.issues[0]?.message ?? 'Data tidak valid' })
   }
 
-  const existing = await db.query.calendarEvents.findFirst({ where: eq(calendarEvents.id, id) })
+  const existing = await db.query.calendarEvents.findFirst({ where: and(eq(calendarEvents.id, id), eq(calendarEvents.organizationId, organization.id)) })
   if (!existing) throw createError({ statusCode: 404, statusMessage: 'Agenda tidak ditemukan' })
 
   const next = { ...existing, ...parsed.data }

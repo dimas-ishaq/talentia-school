@@ -154,7 +154,8 @@ Object.keys(formRegister.value).forEach(key =>
             class="mt-0.5 size-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900/20 dark:border-slate-600 dark:text-white"
           >
           <span>
-            Saya setuju dengan <a href="#" class="font-medium text-slate-900 underline-offset-4 hover:underline dark:text-white">Syarat dan Ketentuan</a>
+            Saya setuju dengan <NuxtLink to="/terms" class="font-medium text-slate-900 underline-offset-4 hover:underline dark:text-white">Syarat dan Ketentuan</NuxtLink>
+            dan <NuxtLink to="/privacy" class="font-medium text-slate-900 underline-offset-4 hover:underline dark:text-white">Kebijakan Privasi</NuxtLink>.
           </span>
         </label>
         <p v-if="errors.tos" class="-mt-3 text-xs text-red-600 dark:text-red-400">{{ errors.tos }}</p>

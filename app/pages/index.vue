@@ -421,7 +421,17 @@ const testimonials = [
                 >
               </li>
               <li>
-                <a href="#" class="hover:text-emerald-400 transition-colors"
+                <NuxtLink to="/terms" class="hover:text-emerald-400 transition-colors"
+                  >Syarat Layanan</NuxtLink
+                >
+              </li>
+              <li>
+                <NuxtLink to="/privacy" class="hover:text-emerald-400 transition-colors"
+                  >Kebijakan Privasi</NuxtLink
+                >
+              </li>
+              <li>
+                <a href="mailto:halo@talentia.school" class="hover:text-emerald-400 transition-colors"
                   >Kontak</a
                 >
               </li>

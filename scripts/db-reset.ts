@@ -3,7 +3,12 @@ import { existsSync, unlinkSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { resolve } from 'node:path'
 
-const DB_PATH = resolve('./server/database/local.db')
+if (process.env.DATABASE_URL?.startsWith('postgres')) {
+  console.error('db:reset diblokir saat DATABASE_URL menunjuk PostgreSQL. Gunakan migrasi drizzle, bukan drop file.')
+  process.exit(1)
+}
+
+const DB_PATH = resolve(process.env.SQLITE_PATH || './server/database/local.db')
 
 function log(msg: string) {
   console.log(`\x1b[36m▸\x1b[0m ${msg}`)

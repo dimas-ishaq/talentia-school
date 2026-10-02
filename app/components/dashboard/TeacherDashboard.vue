@@ -30,18 +30,12 @@ const statsCards = computed(() => [
   { label: 'Hadir Hari Ini', value: stats.value?.todayAttendance ?? 0, icon: 'heroicons:check-circle', color: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400', highlight: false },
 ])
 
-const todaySchedule = [
-  { time: '07:00 - 08:30', subject: 'Matematika', class: '6A', room: 'R-101', status: 'done' },
-  { time: '08:30 - 10:00', subject: 'Matematika', class: '6B', room: 'R-102', status: 'ongoing' },
-  { time: '10:15 - 11:45', subject: 'Matematika', class: '5A', room: 'R-103', status: 'upcoming' },
-  { time: '13:00 - 14:30', subject: 'Matematika', class: '5B', room: 'R-104', status: 'upcoming' },
-]
-
-const pendingTasks = [
-  { student: 'Citra Siswa', task: 'Tugas Bab 3', class: '6A', submittedAt: '2 jam lalu' },
-  { student: 'Fajar Siswa', task: 'Tugas Bab 3', class: '6A', submittedAt: '3 jam lalu' },
-  { student: 'Gita Siswa', task: 'Kuis Aljabar', class: '6B', submittedAt: '5 jam lalu' },
-]
+type TeacherScheduleItem = { time: string; subject: string; class: string; room: string; status: string }
+type PendingTask = { student: string; task: string; class: string; submittedAt: string }
+// ponytail: bagian jadwal & antrean koreksi menunggu endpoint ringkas guru.
+// Jangan hardcode contoh; arahkan ke /schedule dan /grading yang sudah live.
+const todaySchedule: TeacherScheduleItem[] = []
+const pendingTasks: PendingTask[] = []
 
 function getScheduleStatus(status: string) {
   switch (status) {
@@ -148,6 +142,9 @@ function getScheduleStatus(status: string) {
             <NuxtLink to="/dashboard/grading" class="text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 font-medium">Koreksi Semua</NuxtLink>
           </div>
           <div class="p-4 space-y-2">
+            <p v-if="!pendingTasks.length" class="text-center text-sm text-slate-400 dark:text-slate-500">
+              Antrean koreksi per siswa belum tersedia. Buka Koreksi Tugas untuk melihat daftar terbaru.
+            </p>
             <div
               v-for="(task, i) in pendingTasks"
               :key="i"
@@ -178,8 +175,11 @@ function getScheduleStatus(status: string) {
             <NuxtLink to="/dashboard/classes" class="text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 font-medium">Lihat</NuxtLink>
           </div>
           <div class="p-4 space-y-2">
+            <p v-if="!todaySchedule.length" class="text-center text-sm text-slate-400 dark:text-slate-500">
+              Jadwal hari ini belum tersedia. Buka Jadwal untuk melihat data terbaru.
+            </p>
             <div
-              v-for="kelas in [{ name: '6A', students: 30, attendance: 28 }, { name: '6B', students: 28, attendance: 26 }, { name: '5A', students: 32, attendance: 30 }]"
+              v-for="kelas in [] as { name: string; students: number; attendance: number }[]"
               :key="kelas.name"
               class="p-3 rounded-lg bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
             >
@@ -233,13 +233,8 @@ function getScheduleStatus(status: string) {
             <h3 class="font-semibold text-slate-800 dark:text-slate-100 text-sm">Pengumuman</h3>
             <NuxtLink to="/dashboard/announcements" class="text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 font-medium">Lihat</NuxtLink>
           </div>
-          <div class="p-4 space-y-3">
-            <div v-for="i in 3" :key="i" class="pb-3 border-b border-slate-100 dark:border-slate-700 last:border-0 last:pb-0">
-              <NuxtLink to="/dashboard/announcements" class="font-medium text-sm text-slate-800 dark:text-slate-200 hover:text-emerald-600 dark:hover:text-emerald-400 line-clamp-1">
-                {{ ['Ujian Tengah Semester', 'Rapat Guru', 'Libur Nasional'][i - 1] }}
-              </NuxtLink>
-              <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">{{ i }} hari yang lalu</p>
-            </div>
+          <div class="p-4 text-center text-sm text-slate-400 dark:text-slate-500">
+            Buka halaman Pengumuman untuk melihat informasi terbaru.
           </div>
         </div>
 

@@ -2,7 +2,7 @@
 definePageMeta({
   layout: "dashboard",
   middleware: ["auth", "role"],
-  roles: ["admin"],
+  roles: ["admin", "org_admin", "owner"],
 });
 
 const route = useRoute();

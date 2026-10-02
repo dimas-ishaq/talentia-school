@@ -26,31 +26,16 @@ const statsCards = computed(() => [
   { label: "Kehadiran", value: stats.value?.attendanceRate ?? 0, icon: "heroicons:check-circle", color: "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400", suffix: "%", highlight: false },
 ]);
 
-const todaySchedule = [
-  { time: "07:00 - 08:30", subject: "Matematika", teacher: "Bu Ani", room: "R-101", status: "done" },
-  { time: "08:30 - 10:00", subject: "Bahasa Indonesia", teacher: "Pak Budi", room: "R-102", status: "ongoing" },
-  { time: "10:15 - 11:45", subject: "IPA", teacher: "Bu Citra", room: "Lab-1", status: "upcoming" },
-  { time: "13:00 - 14:30", subject: "IPS", teacher: "Pak Dedi", room: "R-103", status: "upcoming" },
-];
-
-const upcomingAssignments = [
-  { title: "Tugas Bab 3 - Aljabar", subject: "Matematika", due: "Besok, 23:59", urgent: true },
-  { title: "Esai Lingkungan", subject: "Bahasa Indonesia", due: "2 hari lagi", urgent: false },
-  { title: "Laporan Praktikum", subject: "IPA", due: "3 hari lagi", urgent: false },
-];
-
-const recentGrades = [
-  { subject: "Matematika", type: "UTS", score: 90, date: "2 hari lalu" },
-  { subject: "Bahasa Indonesia", type: "Tugas", score: 85, date: "3 hari lalu" },
-  { subject: "IPA", type: "Kuis", score: 78, date: "5 hari lalu" },
-];
-
-const subjectProgress = [
-  { subject: "Matematika", progress: 80, color: "bg-blue-500" },
-  { subject: "Bahasa Indonesia", progress: 65, color: "bg-emerald-500" },
-  { subject: "IPA", progress: 90, color: "bg-purple-500" },
-  { subject: "IPS", progress: 45, color: "bg-amber-500" },
-];
+type StudentScheduleItem = { time: string; subject: string; teacher: string; room: string; status: string }
+type UpcomingAssignment = { title: string; subject: string; due: string; urgent: boolean }
+type RecentGrade = { subject: string; type: string; date: string; score: number }
+type SubjectProgress = { subject: string; progress: number; color: string }
+// ponytail: bagian di bawah menunggu endpoint ringkas siswa.
+// Jangan hardcode jadwal/tugas/nilai; tampilkan empty-state yang jujur.
+const todaySchedule: StudentScheduleItem[] = []
+const upcomingAssignments: UpcomingAssignment[] = []
+const recentGrades: RecentGrade[] = []
+const subjectProgress: SubjectProgress[] = []
 
 function getScheduleStatus(status: string) {
   switch (status) {
@@ -151,6 +136,9 @@ function getGradeColor(score: number) {
             <NuxtLink to="/dashboard/assignments" class="text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 font-medium">Lihat Semua</NuxtLink>
           </div>
           <div class="p-4 space-y-2">
+            <p v-if="!upcomingAssignments.length" class="text-center text-sm text-slate-400 dark:text-slate-500">
+              Tidak ada tugas dengan deadline terdekat. Lihat Tugas Aktif untuk daftar lengkap.
+            </p>
             <div v-for="(task, i) in upcomingAssignments" :key="i"
               :class="['flex items-center gap-3 p-3 rounded-lg transition-colors',
                 task.urgent ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50']">
@@ -176,6 +164,9 @@ function getGradeColor(score: number) {
             <NuxtLink to="/dashboard/progress" class="text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 font-medium">Detail</NuxtLink>
           </div>
           <div class="p-4 space-y-4">
+            <p v-if="!subjectProgress.length" class="text-center text-sm text-slate-400 dark:text-slate-500">
+              Progress per mata pelajaran belum tersedia. Buka Course untuk melihat materi dan tugas Anda.
+            </p>
             <div v-for="item in subjectProgress" :key="item.subject">
               <div class="flex items-center justify-between mb-1.5">
                 <span class="text-sm font-medium text-slate-700 dark:text-slate-300">{{ item.subject }}</span>
@@ -198,6 +189,9 @@ function getGradeColor(score: number) {
             <NuxtLink to="/dashboard/grades" class="text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 font-medium">Lihat</NuxtLink>
           </div>
           <div class="p-4 space-y-3">
+            <p v-if="!recentGrades.length" class="text-center text-sm text-slate-400 dark:text-slate-500">
+              Belum ada nilai terbaru. Nilai akan muncul setelah guru mengoreksi tugas atau kuis.
+            </p>
             <div v-for="(g, i) in recentGrades" :key="i" class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-700 last:border-0 last:pb-0">
               <div class="min-w-0 flex-1">
                 <div class="font-medium text-sm text-slate-800 dark:text-slate-200 truncate">{{ g.subject }}</div>
@@ -244,13 +238,8 @@ function getGradeColor(score: number) {
             <h3 class="font-semibold text-slate-800 dark:text-slate-100 text-sm">Pengumuman</h3>
             <NuxtLink to="/dashboard/announcements" class="text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 font-medium">Lihat</NuxtLink>
           </div>
-          <div class="p-4 space-y-3">
-            <div v-for="i in 3" :key="i" class="pb-3 border-b border-slate-100 dark:border-slate-700 last:border-0 last:pb-0">
-              <NuxtLink to="/dashboard/announcements" class="font-medium text-sm text-slate-800 dark:text-slate-200 hover:text-emerald-600 dark:hover:text-emerald-400 line-clamp-1">
-                {{ ['Ujian Tengah Semester', 'Lomba Sains', 'Libur Nasional'][i - 1] }}
-              </NuxtLink>
-              <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">{{ i }} hari yang lalu</p>
-            </div>
+          <div class="p-4 text-center text-sm text-slate-400 dark:text-slate-500">
+            Buka halaman Pengumuman untuk melihat informasi terbaru.
           </div>
         </div>
 

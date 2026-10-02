@@ -10,7 +10,7 @@ import { requireOrganization } from '~~/server/utils/tenant'
  */
 export async function allowedAttendanceScopes(event: Parameters<typeof requireUserSession>[0]) {
   const { user, organization } = await requireOrganization(event)
-  if (user.role === 'admin') return null
+  if (['admin', 'org_admin', 'owner'].includes(user.role)) return null
   if (user.role !== 'teacher') throw createError({ statusCode: 403, statusMessage: 'Akses absensi ditolak' })
 
   const teacher = await db.query.teachers.findFirst({ where: and(eq(teachers.userId, user.id), eq(teachers.organizationId, organization.id)), columns: { id: true } })

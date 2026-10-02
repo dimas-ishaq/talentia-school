@@ -50,7 +50,7 @@ export default defineEventHandler(async (event) => {
     return { data: paged, studentId: student.id, summary: buildSummary(rows), meta: { page: safePage, perPage, total, totalPages } }
   }
 
-  if (user.role !== 'admin' && user.role !== 'teacher') {
+  if (!['admin', 'org_admin', 'owner', 'teacher'].includes(user.role)) {
     throw createError({ statusCode: 403, statusMessage: 'Role tidak didukung' })
   }
 

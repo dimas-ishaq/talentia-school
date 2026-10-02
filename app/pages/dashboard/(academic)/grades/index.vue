@@ -1,8 +1,8 @@
 <script setup lang="ts">
-definePageMeta({ layout: 'dashboard', middleware: ['auth'], roles: ['student', 'teacher', 'admin'] })
+definePageMeta({ layout: 'dashboard', middleware: ['auth'], roles: ['student', 'teacher', 'admin', 'org_admin', 'owner'] })
 
-const { user } = useAuth()
-const isTeacherOrAdmin = computed(() => user.value?.role === 'teacher' || user.value?.role === 'admin')
+const { isAdmin, isTeacher } = useAuth()
+const isTeacherOrAdmin = computed(() => isTeacher.value || isAdmin.value)
 
 const { data: allCourses, refresh } = await useFetch<{ data: any[] }>(() => '/api/courses', { key: 'user-courses-all' })
 const courses = computed(() => allCourses.value?.data ?? [])
@@ -21,7 +21,7 @@ const courses = computed(() => allCourses.value?.data ?? [])
         <p class="text-center text-sm text-slate-500 dark:text-slate-400">Belum ada course aktif.</p>
       </div>
       <div v-else class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <NuxtLink v-for="c in courses" :key="c.id" :to="`/dashboard/courses/${c.id}/progress`" class="overflow-hidden rounded-xl border border-slate-200 hover:border-emerald-400 hover:shadow-md dark:border-slate-700 dark:hover:border-emerald-600">
+        <NuxtLink v-for="c in courses" :key="c.id" :to="`/dashboard/courses/${c.id}`" class="overflow-hidden rounded-xl border border-slate-200 hover:border-emerald-400 hover:shadow-md dark:border-slate-700 dark:hover:border-emerald-600">
           <img v-if="c.coverUrl" :src="c.coverUrl" class="h-32 w-full object-cover">
           <div class="bg-gradient-to-br from-slate-50 to-white p-4 dark:from-slate-800 dark:to-slate-900">
             <h3 class="font-semibold text-slate-800 dark:text-slate-100">{{ c.name }}</h3>

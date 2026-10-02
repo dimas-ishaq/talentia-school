@@ -3,14 +3,14 @@
 definePageMeta({
   layout: "dashboard",
   middleware: ["auth", "role"],
-  roles: ["admin"],
+  roles: ["admin", "org_admin", "owner"],
 });
 
-const { user } = useAuth();
+const { isAdmin } = useAuth();
 </script>
 
 <template>
   <div>
-    <AdminSubjectsView v-if="user?.role === 'admin'" />
+    <AdminSubjectsView v-if="isAdmin" />
   </div>
 </template>

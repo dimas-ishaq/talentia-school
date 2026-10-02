@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { DEFAULT_TIMEZONE, TIMEZONE_OPTIONS } from '~~/shared/timezone'
 
-definePageMeta({ layout: 'dashboard', middleware: ['auth', 'role'], roles: ['admin'] })
+definePageMeta({ layout: 'dashboard', middleware: ['auth', 'role'], roles: ['admin', 'org_admin', 'owner'] })
 
 type SettingRow = { key: string; value: string; updatedAt: string }
 const TIMEZONES = TIMEZONE_OPTIONS

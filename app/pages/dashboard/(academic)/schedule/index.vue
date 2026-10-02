@@ -2,13 +2,13 @@
 definePageMeta({
   layout: 'dashboard',
   middleware: ['auth'],
-  roles: ['admin', 'teacher', 'student'],
+  roles: ['admin', 'org_admin', 'owner', 'teacher', 'student'],
 })
 
-const { user } = useAuth()
+const { isAdmin, isTeacher, isStudent } = useAuth()
 </script>
 <template>
-  <AdminScheduleView v-if="user?.role === 'admin'" />
-  <TeacherScheduleView v-else-if="user?.role === 'teacher'" />
-  <StudentScheduleView v-else-if="user?.role === 'student'" />
+  <AdminScheduleView v-if="isAdmin" />
+  <TeacherScheduleView v-else-if="isTeacher" />
+  <StudentScheduleView v-else-if="isStudent" />
 </template>

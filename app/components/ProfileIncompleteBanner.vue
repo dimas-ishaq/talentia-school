@@ -32,12 +32,20 @@ const show = computed(() => !profileComplete.value && !dismissed.value && (role.
     <div class="flex items-start gap-3">
       <Icon name="heroicons:exclamation-triangle" class="h-5 w-5 shrink-0 text-amber-500" />
       <div>
-        <p class="text-sm font-semibold text-amber-800 dark:text-amber-300">
-          Profil belum lengkap
-        </p>
-        <p class="text-sm text-amber-700 dark:text-amber-400 mt-0.5">
-          {{ saran }} Silakan hubungi admin sekolah untuk melengkapi data Anda.
-        </p>
+        <div class="min-w-0">
+          <p class="text-sm font-semibold text-amber-800 dark:text-amber-300">
+            Profil belum lengkap
+          </p>
+          <p class="text-sm text-amber-700 dark:text-amber-400 mt-0.5">
+            {{ saran }} Lengkapi sekarang di halaman profil.
+          </p>
+          <NuxtLink
+            to="/dashboard/profile"
+            class="mt-2 inline-flex items-center gap-1 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600"
+          >
+            <Icon name="heroicons:pencil-square" class="h-3.5 w-3.5" /> Lengkapi profil
+          </NuxtLink>
+        </div>
       </div>
     </div>
     <button

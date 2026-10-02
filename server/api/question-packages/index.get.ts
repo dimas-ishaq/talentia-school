@@ -1,20 +1,23 @@
 import { and, asc, count, eq, inArray, sql } from 'drizzle-orm'
 import { courses, courseTeachers, teachers, questionBank, questionPackages } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  const { user, organization } = await requireOrganization(event)
 
   let courseIds: string[] | undefined
   if (user.role === 'teacher') {
-    const teacher = await db.query.teachers.findFirst({ where: eq(teachers.userId, user.id), columns: { id: true } })
+    const teacher = await db.query.teachers.findFirst({ where: and(eq(teachers.userId, user.id), eq(teachers.organizationId, organization.id)), columns: { id: true } })
     if (!teacher) return { data: [] }
     const rows = await db.select({ id: courseTeachers.courseId }).from(courseTeachers).where(eq(courseTeachers.teacherId, teacher.id))
     courseIds = rows.map((r) => r.id)
     if (!courseIds.length) return { data: [] }
   }
 
-  const where = courseIds ? and(eq(questionPackages.isActive, true), inArray(questionPackages.courseId, courseIds)) : eq(questionPackages.isActive, true)
+  // Isolasi tenant: paket hanya dari course milik organisasi ini.
+  const conditions = [eq(questionPackages.isActive, true), eq(courses.organizationId, organization.id)]
+  if (courseIds) conditions.push(inArray(questionPackages.courseId, courseIds))
 
   const rows = await db
     .select({
@@ -29,8 +32,9 @@ export default defineEventHandler(async (event) => {
       questionCount: count(questionBank.id),
     })
     .from(questionPackages)
+    .innerJoin(courses, eq(courses.id, questionPackages.courseId))
     .leftJoin(questionBank, and(eq(questionBank.packageId, questionPackages.id), eq(questionBank.isActive, true)))
-    .where(where)
+    .where(and(...conditions))
     .groupBy(questionPackages.id)
     .orderBy(asc(questionPackages.courseId), asc(questionPackages.name))
 

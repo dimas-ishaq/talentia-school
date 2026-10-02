@@ -114,6 +114,23 @@ async function main() {
   )
   insQuestion.run('q_a', 'global', 'Soal rahasia sekolah A', 'multiple_choice', 'u_a', 1)
   insQuestion.run('q_b', 'global', 'Soal rahasia sekolah B', 'multiple_choice', 'u_b', 2)
+  insUser.run('u_ia', 'org_a', 'nonaktif.a@sekolah.test', 'Siswa Nonaktif A', 'student', password, 1)
+  raw.prepare(
+    'INSERT INTO students (id, organization_id, user_id, nis, gender, is_active, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)',
+  ).run('siswa_ia', 'org_a', 'u_ia', 'NIS-A-9', 'L', 1)
+  const today = new Date()
+  const iso = (d: Date) => d.toISOString().slice(0, 10)
+  const plus5 = new Date(today.getTime() + 5 * 864e5)
+  const insCal = raw.prepare(
+    'INSERT INTO calendar_events (id, organization_id, title, start_date, end_date, visibility, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  )
+  insCal.run('cal_a', 'org_a', 'Agenda A', iso(today), iso(plus5), 'public', 'u_a', 1, 1)
+  insCal.run('cal_b', 'org_b', 'Agenda B', iso(today), iso(plus5), 'public', 'u_b', 2, 2)
+  const insAtt = raw.prepare(
+    'INSERT INTO attendance (id, organization_id, student_id, class_id, date, status, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+  )
+  insAtt.run('att_a', 'org_a', 'siswa_a', 'class_a', iso(today), 'present', 'u_a', 1)
+  insAtt.run('att_b', 'org_b', 'siswa_b', 'class_b', iso(today), 'present', 'u_b', 2)
   raw.close()
 
   log('→ boot app')
@@ -171,7 +188,7 @@ async function main() {
       const res = await api(cookieA, '/api/students?perPage=100')
       assert.equal(res.status, 200)
       const ids = (res.body?.data ?? []).map((r: any) => r.id)
-      assert.deepEqual(ids, ['siswa_a'], `harus cuma siswa_a, dapat ${JSON.stringify(ids)}`)
+      assert.deepEqual(ids.sort(), ['siswa_a', 'siswa_ia'], `harus cuma siswa org_a, dapat ${JSON.stringify(ids)}`)
     })
     await check('GET /api/courses/course_b sebagai admin A → 404', async () => {
       const res = await api(cookieA, '/api/courses/course_b')
@@ -198,6 +215,50 @@ async function main() {
       assert.equal(res.status, 200, `status ${res.status}`)
       const qs = (res.body?.data ?? []).map((r: any) => r.question)
       assert.deepEqual(qs, ['Soal rahasia sekolah A'], `dapat ${JSON.stringify(qs)}`)
+    })
+    await check('GET /api/exam-events/ev_b sebagai admin A → 404', async () => {
+      const res = await api(cookieA, '/api/exam-events/ev_b')
+      assert.equal(res.status, 404, `harusnya 404, dapat ${res.status} ${JSON.stringify(res.body)}`)
+    })
+    await check('GET /api/exam-events/ev_a sebagai admin A → 200', async () => {
+      const res = await api(cookieA, '/api/exam-events/ev_a')
+      assert.equal(res.status, 200, `harusnya 200, dapat ${res.status}`)
+    })
+    await check('GET /api/calendar hanya memuat agenda/kalender org sendiri', async () => {
+      const res = await api(cookieA, '/api/calendar')
+      assert.equal(res.status, 200, `status ${res.status}`)
+      const titles: string[] = (res.body?.data ?? []).map((r: any) => r.title)
+      assert.equal(titles.includes('Agenda A'), true, `harus ada Agenda A, dapat ${JSON.stringify(titles)}`)
+      assert.equal(titles.includes('Agenda B'), false, `tidak boleh ada Agenda B, dapat ${JSON.stringify(titles)}`)
+    })
+    await check('GET /api/calendar/upcoming hanya memuat upcoming org sendiri', async () => {
+      const res = await api(cookieA, '/api/calendar/upcoming')
+      assert.equal(res.status, 200, `status ${res.status}`)
+      const titles: string[] = (res.body?.data ?? []).map((r: any) => r.title ?? r.name ?? '')
+      // custom + exam are combined in upcoming; only org_a visible
+      assert.equal(titles.includes('Agenda B'), false, `tidak boleh ada Agenda B, dapat ${JSON.stringify(titles)}`)
+    })
+    await check('GET /api/attendance/students hanya memuat siswa org sendiri', async () => {
+      const res = await api(cookieA, '/api/attendance/students?perPage=100')
+      assert.equal(res.status, 200, `status ${res.status}`)
+      const names: string[] = (res.body?.data ?? []).map((r: any) => r.name ?? r.nis ?? '')
+      assert.equal(names.includes('Siswa A'), true, `harus ada Siswa A, dapat ${JSON.stringify(res.body?.data)}`)
+      assert.equal(names.includes('Siswa B'), false, `tidak boleh ada Siswa B`)
+    })
+    await check('GET /api/attendance/summary hanya menghitung organisasi sendiri', async () => {
+      const today = new Date().toISOString().slice(0, 10)
+      const res = await api(cookieA, `/api/attendance/summary?from=${today}&to=${today}`)
+      assert.equal(res.status, 200, `status ${res.status}`)
+      const ids: string[] = (res.body?.data ?? []).map((r: any) => r.studentId ?? r.id ?? '')
+      assert.equal(ids.includes('siswa_b'), false, `tidak boleh ada siswa_b di summary org_a`)
+    })
+    await check('GET /api/organizations/billing menghitung per org is_active', async () => {
+      const res = await api(cookieA, '/api/organizations/billing')
+      assert.equal(res.status, 200, `status ${res.status} ${JSON.stringify(res.body)}`)
+      // org_a: siswa_a aktif (1), siswa_ia nonaktif (0) → 1; siswa_b ada di org_b, tidak dihitung
+      assert.equal(res.body?.data?.billableStudents, 1, `org_a harus 1 (is_active), dapat ${JSON.stringify(res.body?.data)}`)
+      const resB = await api(cookieB, '/api/organizations/billing')
+      assert.equal(resB.body?.data?.billableStudents, 1, `org_b harus 1, dapat ${JSON.stringify(resB.body?.data)}`)
     })
   } finally {
     shuttingDown = true

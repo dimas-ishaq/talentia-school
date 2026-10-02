@@ -24,4 +24,14 @@ DATABASE_URL='postgresql://postgres:password@localhost:5432/school_app' npm run 
 
 `drizzle-kit` otomatis memakai schema PostgreSQL `server/database/schema.postgres.ts`, dialect PostgreSQL, serta folder migrasi `drizzle-postgresql/` ketika `DATABASE_URL` aktif.
 
-Catatan: script migrasi legacy di `scripts/` masih SQLite-specific. Gunakan `npm run db:push` untuk schema PostgreSQL baru; migrasi data SQLite lama belum otomatis.
+## Backup & restore
+
+```bash
+BACKUP_DIR=./backups DATABASE_URL=postgresql://... sh scripts/backup-pg.sh
+BACKUP_PATH=./backups/pg-....dump npm run db:backup:verify
+pg_restore -d "$DATABASE_URL" backups/pg-....dump
+```
+
+Staging: `backup-pg.sh` + compose volume `backups:/app/backups`; cron di host/sidecar bila perlu.
+
+Catatan: script migrasi legacy di `scripts/` masih SQLite-specific. Gunakan `npm run db:push` dev atau `docker compose up` (service `migrate` menjalankan `drizzle-kit migrate` → `drizzle-postgresql/`) untuk Postgres.

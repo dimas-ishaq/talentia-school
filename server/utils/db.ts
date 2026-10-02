@@ -15,6 +15,9 @@ let sqlite: InstanceType<typeof Database> | null = null
 let sqliteDb: AppDb | null = null
 
 if (!isPostgres) {
+// ponytail: blok SQLite ALTER di bawah ini hanya fallback dev.
+// Source of truth Postgres adalah migrasi versioned di drizzle-postgresql/* (compose service `migrate`).
+// Jangan tambah ALTER Postgres di sini; tambah file migrasi baru via drizzle-kit generate.
   sqlite = new Database(process.env.SQLITE_PATH || './server/database/local.db')
   const hasColumn = (table: string, column: string) => sqlite!.prepare(`PRAGMA table_info("${table}")`).all().some((row: any) => row.name === column)
   const hasTable = (table: string) => !!sqlite!.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`).get(table)

@@ -300,11 +300,25 @@ async function main() {
       })
       assert.equal(res.status, 404, `cross-tenant patch harus 404, dapat ${res.status} ${await res.text()}`)
     })
+    await check('POST /api/users tidak 500 di SQLite', async () => {
+      const res = await fetch(`${BASE}/api/users`, {
+        method: 'POST', headers: { 'content-type': 'application/json', cookie: cookieA },
+        body: JSON.stringify({ email: `guru-${Date.now()}@sekolah.test`, name: 'Guru Baru', role: 'teacher', password: PASSWORD }),
+      })
+      assert.equal(res.status, 200, `create user harus 200, dapat ${res.status} ${await res.text()}`)
+    })
+    await check('POST /api/students tidak 500 di SQLite', async () => {
+      const res = await fetch(`${BASE}/api/students`, {
+        method: 'POST', headers: { 'content-type': 'application/json', cookie: cookieA },
+        body: JSON.stringify({ name: 'Siswa Baru', email: `siswa-${Date.now()}@sekolah.test`, password: PASSWORD, nis: `NIS-${Date.now()}`, classId: 'class_a', gender: 'L' }),
+      })
+      assert.equal(res.status, 200, `create student harus 200, dapat ${res.status} ${await res.text()}`)
+    })
     await check('GET /api/organizations/billing menghitung per org is_active', async () => {
       const res = await api(cookieA, '/api/organizations/billing')
       assert.equal(res.status, 200, `status ${res.status} ${JSON.stringify(res.body)}`)
       // org_a: siswa_a aktif (1), siswa_ia nonaktif (0) → 1; siswa_b ada di org_b, tidak dihitung
-      assert.equal(res.body?.data?.billableStudents, 1, `org_a harus 1 (is_active), dapat ${JSON.stringify(res.body?.data)}`)
+      assert.equal(res.body?.data?.billableStudents, 2, `org_a harus 2 setelah create student (is_active), dapat ${JSON.stringify(res.body?.data)}`)
       const resB = await api(cookieB, '/api/organizations/billing')
       assert.equal(resB.body?.data?.billableStudents, 1, `org_b harus 1, dapat ${JSON.stringify(resB.body?.data)}`)
     })

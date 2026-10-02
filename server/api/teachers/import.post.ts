@@ -25,15 +25,16 @@ export default defineEventHandler(async (event) => {
     if (duplicateNip) { errors.push(`Baris ${line}: NIP ${row.nip} sudah terdaftar, dilewati`); continue }
     const duplicateEmail = await db.query.users.findFirst({ where: eq(users.email, row.email), columns: { id: true } })
     if (duplicateEmail) { errors.push(`Baris ${line}: email ${row.email} sudah digunakan, dilewati`); continue }
+    const userId = crypto.randomUUID()
+    const password = await bcrypt.hash(row.password || row.nip, 10)
     try {
-      const password = await bcrypt.hash(row.password || row.nip, 10)
-      await db.transaction(async (tx) => {
-        const userId = crypto.randomUUID()
-        await tx.insert(users).values({ id: userId, organizationId: organization.id, email: row.email, name: row.name, password, role: 'teacher' })
-        await tx.insert(teachers).values({ id: crypto.randomUUID(), organizationId: organization.id, userId, code: row.code || null, nip: row.nip, phone: row.phone || null, address: row.address || null, subject: row.subject || null })
-      })
+      await db.insert(users).values({ id: userId, organizationId: organization.id, email: row.email, name: row.name, password, role: 'teacher' })
+      await db.insert(teachers).values({ id: crypto.randomUUID(), organizationId: organization.id, userId, code: row.code || null, nip: row.nip, phone: row.phone || null, address: row.address || null, subject: row.subject || null })
       success++
-    } catch { errors.push(`Baris ${line}: gagal menyimpan ${row.nip}`) }
+    } catch {
+      await db.delete(users).where(eq(users.id, userId)).catch(() => {})
+      errors.push(`Baris ${line}: gagal menyimpan ${row.nip}`)
+    }
   }
   return { success, failed: errors.length, errors }
 })

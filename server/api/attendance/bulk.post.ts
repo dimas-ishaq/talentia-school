@@ -16,7 +16,6 @@ export default defineEventHandler(async (event) => {
   const { classId, subjectId, date, status } = schema.parse(await readBody(event))
   const user = await requireAttendanceAccess(event, classId, subjectId)
 
-  // Siswa nonaktif tetap ikut dicatat (kebijakan: data historis tidak hilang).
   const classStudents = await db.query.students.findMany({ where: eq(students.classId, classId), columns: { id: true } })
   if (!classStudents.length) return { success: true, created: 0, updated: 0 }
 
@@ -28,24 +27,29 @@ export default defineEventHandler(async (event) => {
   const missing = classStudents.filter((s) => !existingIds.has(s.id))
 
   let created = 0
+  // ponytail: better-sqlite3 tidak mendukung async transaction; batch kecil (≤1 kelas),
+  // insert idempoten via unique (student_id, course_id, date) sehingga retry aman.
+  for (const student of missing) {
+    await db.insert(attendance).values({
+      id: crypto.randomUUID(),
+      organizationId: user.organizationId,
+      studentId: student.id,
+      classId,
+      subjectId,
+      date,
+      status: status ?? 'present',
+      recordedBy: user.id,
+    })
+    created++
+  }
+
   let updated = 0
-  await db.transaction(async (tx) => {
-    // Buat catatan untuk siswa yang belum tercatat.
-    for (const student of missing) {
-      await tx.insert(attendance).values({
-        id: crypto.randomUUID(), studentId: student.id, classId, subjectId, date,
-        status: status ?? 'present', recordedBy: user.id,
-      })
-      created++
-    }
-    // Set ulang status untuk semua siswa bila diminta (Tandai semua).
-    if (status) {
-      await tx.update(attendance)
-        .set({ status, recordedBy: user.id })
-        .where(and(eq(attendance.date, date), eq(attendance.classId, classId), eq(attendance.subjectId, subjectId)))
-      updated = classStudents.length
-    }
-  })
+  if (status) {
+    await db.update(attendance)
+      .set({ status, recordedBy: user.id })
+      .where(and(eq(attendance.date, date), eq(attendance.classId, classId), eq(attendance.subjectId, subjectId)))
+    updated = classStudents.length
+  }
 
   return { success: true, created, updated }
 })

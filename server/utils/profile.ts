@@ -25,6 +25,17 @@ export function createProfileForRole(
 }
 
 /** Hapus baris profil sesuai role (saat role user diubah di management). */
+export async function createProfileForRoleAsync(
+  role: User['role'],
+  userId: string,
+  extra: Record<string, unknown> = {},
+) {
+  const id = crypto.randomUUID()
+  if (role === 'teacher') await db.insert(teachers).values({ id, userId, ...extra } as any)
+  else if (role === 'student') await db.insert(students).values({ id, userId, ...extra } as any)
+  else if (role === 'parent') await db.insert(parents).values({ id, userId, phone: '', ...extra } as any)
+}
+
 export function deleteProfileForRole(tx: DbTransaction, role: User['role'], userId: string) {
   if (role === 'teacher') tx.delete(teachers).where(eq(teachers.userId, userId)).run()
   else if (role === 'student') tx.delete(students).where(eq(students.userId, userId)).run()

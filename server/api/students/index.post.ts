@@ -37,49 +37,34 @@ export default defineEventHandler(async (event) => {
 
   const data = parsed.data;
 
-  // 1) Cek NIS duplikat
   const existingStudent = await db.query.students.findFirst({
     where: and(eq(students.nis, data.nis), eq(students.organizationId, organization.id)),
     columns: { id: true },
   });
-  if (existingStudent) {
-    throw createError({
-      statusCode: 409,
-      statusMessage: `NIS ${data.nis} sudah terdaftar`,
-    });
-  }
+  if (existingStudent) throw createError({ statusCode: 409, statusMessage: `NIS ${data.nis} sudah terdaftar` });
 
-  // 2) Cek email duplikat
-  const existingUser = await db.query.users.findFirst({
-    where: eq(users.email, data.email),
-    columns: { id: true },
-  });
-  if (existingUser) {
-    throw createError({
-      statusCode: 409,
-      statusMessage: `Email ${data.email} sudah digunakan`,
-    });
-  }
+  const existingUser = await db.query.users.findFirst({ where: eq(users.email, data.email), columns: { id: true } });
+  if (existingUser) throw createError({ statusCode: 409, statusMessage: `Email ${data.email} sudah digunakan` });
 
-  // 3) Hash password
   const hashedPassword = await bcrypt.hash(data.password, 10);
+  const userId = crypto.randomUUID();
+  const studentId = crypto.randomUUID();
 
-  // 4) Transaksi: buat user + student atomik
-  const studentId = await db.transaction(async (tx) => {
-    const userId = crypto.randomUUID();
-    const newStudentId = crypto.randomUUID();
-
-    await tx.insert(users).values({
+  // better-sqlite3 tidak mendukung async transaction; sequential + rollback kompensasi.
+  let userCreated = false;
+  try {
+    await db.insert(users).values({
       id: userId,
       organizationId: organization.id,
       email: data.email,
       name: data.name,
       password: hashedPassword,
-      role: "student", // lowercase sesuai enum schema kamu
+      role: "student",
     });
+    userCreated = true;
 
-    await tx.insert(students).values({
-      id: newStudentId,
+    await db.insert(students).values({
+      id: studentId,
       organizationId: organization.id,
       userId,
       nis: data.nis,
@@ -89,13 +74,10 @@ export default defineEventHandler(async (event) => {
       phone: data.phone || null,
       address: data.address || null,
     });
+  } catch (err) {
+    if (userCreated) await db.delete(users).where(eq(users.id, userId)).catch(() => {});
+    throw err;
+  }
 
-    return newStudentId;
-  });
-
-  return {
-    success: true,
-    data: { id: studentId },
-    message: "Siswa berhasil ditambahkan",
-  };
+  return { success: true, data: { id: studentId }, message: "Siswa berhasil ditambahkan" };
 });

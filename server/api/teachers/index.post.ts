@@ -58,33 +58,22 @@ export default defineEventHandler(async (event) => {
   // 3) Hash password
   const hashedPassword = await bcrypt.hash(data.password, 10)
 
-  // 4) Transaksi: buat user + guru
-  const teacherId = await db.transaction(async (tx) => {
-    const userId = crypto.randomUUID()
-    const newTeacherId = crypto.randomUUID()
-
-    await tx.insert(users).values({
-      id: userId,
-      organizationId: organization.id,
-      email: data.email,
-      name: data.name,
-      password: hashedPassword,
-      role: 'teacher',
+  const userId = crypto.randomUUID()
+  const teacherId = crypto.randomUUID()
+  let userCreated = false
+  try {
+    await db.insert(users).values({
+      id: userId, organizationId: organization.id, email: data.email, name: data.name, password: hashedPassword, role: 'teacher',
     })
-
-    await tx.insert(teachers).values({
-      id: newTeacherId,
-      organizationId: organization.id,
-      userId,
-      code: data.code || null,
-      nip: data.nip,
-      phone: data.phone || null,
-      address: data.address || null,
-      subject: data.subject || null,
+    userCreated = true
+    await db.insert(teachers).values({
+      id: teacherId, organizationId: organization.id, userId, code: data.code || null, nip: data.nip,
+      phone: data.phone || null, address: data.address || null, subject: data.subject || null,
     })
-
-    return newTeacherId
-  })
+  } catch (err) {
+    if (userCreated) await db.delete(users).where(eq(users.id, userId)).catch(() => {})
+    throw err
+  }
 
   return {
     success: true,

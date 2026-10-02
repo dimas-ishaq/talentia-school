@@ -1,12 +1,13 @@
 import { eq, inArray, and } from 'drizzle-orm'
 import { activityProgress, activities, attendance, courseClasses, courses, sections, students } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  const { user, organization } = await requireOrganization(event)
   if (user.role !== 'student') throw createError({ statusCode: 403, statusMessage: 'Akses khusus siswa' })
 
-  const student = await db.query.students.findFirst({ where: eq(students.userId, user.id), columns: { id: true, classId: true } })
+  const student = await db.query.students.findFirst({ where: and(eq(students.userId, user.id), eq(students.organizationId, organization.id)), columns: { id: true, classId: true } })
   if (!student?.classId) return { activeAssignments: 0, pendingQuizzes: 0, averageGrade: 0, attendanceRate: 0 }
 
   const assigned = await db.select({ id: courseClasses.courseId }).from(courseClasses).where(eq(courseClasses.classId, student.classId))

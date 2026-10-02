@@ -7,9 +7,10 @@ import { students, users, classes } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
 import { normalizePerPage } from '~~/server/utils/pagination'
 import { allowedAttendanceScopes } from '~~/server/utils/attendanceAccess'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  const { user, organization } = await requireOrganization(event)
   if (user.role !== 'admin' && user.role !== 'teacher') throw createError({ statusCode: 403, statusMessage: 'Akses absensi ditolak' })
 
   const query = getQuery(event)
@@ -18,7 +19,7 @@ export default defineEventHandler(async (event) => {
   const q = typeof query.q === 'string' ? query.q.trim() : ''
   const classId = typeof query.classId === 'string' && query.classId ? query.classId : undefined
 
-  const conditions: any[] = []
+  const conditions: any[] = [eq(students.organizationId, organization.id)]
   if (classId) conditions.push(eq(students.classId, classId))
   if (q) conditions.push(or(like(users.name, `%${q}%`), like(students.nis, `%${q}%`)))
 

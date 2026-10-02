@@ -2,9 +2,10 @@
 import { and, asc, eq, gte, inArray, lte, or, isNull } from 'drizzle-orm'
 import { calendarEvents, examEvents } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  const { user, organization } = await requireOrganization(event)
   const today = new Date().toISOString().slice(0, 10)
   const limitDate = new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10)
   const visibilities = ['public']
@@ -13,6 +14,7 @@ export default defineEventHandler(async (event) => {
 
   const custom = await db.query.calendarEvents.findMany({
     where: and(
+      eq(calendarEvents.organizationId, organization.id),
       inArray(calendarEvents.visibility, visibilities as any),
       lte(calendarEvents.startDate, limitDate),
       or(gte(calendarEvents.endDate, today), isNull(calendarEvents.endDate), gte(calendarEvents.startDate, today)),
@@ -22,7 +24,7 @@ export default defineEventHandler(async (event) => {
   })
 
   const exams = await db.query.examEvents.findMany({
-    where: and(eq(examEvents.status, 'published'), lte(examEvents.startDate, limitDate), gte(examEvents.endDate, today)),
+    where: and(eq(examEvents.organizationId, organization.id), eq(examEvents.status, 'published'), lte(examEvents.startDate, limitDate), gte(examEvents.endDate, today)),
     orderBy: [asc(examEvents.startDate)],
     limit: 14,
   })

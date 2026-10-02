@@ -1,9 +1,10 @@
 // server/api/calendar/[id].ical.get.ts
 // GET /api/calendar/:id.ical — export satu agenda ke format ICS/iCalendar.
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { calendarEvents, examEvents } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
 import { EVENT_TYPE_META } from '~~/server/utils/calendar'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 interface IcalEvent {
   id: string
@@ -19,17 +20,17 @@ interface IcalEvent {
 }
 
 export default defineEventHandler(async (h3) => {
-  await requireUserSession(h3)
+  const { organization } = await requireOrganization(h3)
   const rawId = getRouterParam(h3, 'id') ?? ''
   const eventId = rawId.replace(/^(cal_|exam_)/, '')
   if (!eventId) throw createError({ statusCode: 400, statusMessage: 'ID tidak valid' })
 
-  // 1. Cari di agenda custom
-  let found: IcalEvent | null = (await db.query.calendarEvents.findFirst({ where: eq(calendarEvents.id, eventId) })) ?? null
+  // 1. Cari di agenda custom (tenant-scoped)
+  let found: IcalEvent | null = (await db.query.calendarEvents.findFirst({ where: and(eq(calendarEvents.id, eventId), eq(calendarEvents.organizationId, organization.id)) })) ?? null
 
-  // 2. Bila tidak ada, cari di exam_events
+  // 2. Bila tidak ada, cari di exam_events (tenant-scoped)
   if (!found) {
-    const exam = await db.query.examEvents.findFirst({ where: eq(examEvents.id, eventId) })
+    const exam = await db.query.examEvents.findFirst({ where: and(eq(examEvents.id, eventId), eq(examEvents.organizationId, organization.id)) })
     if (exam) {
       found = {
         id: exam.id,

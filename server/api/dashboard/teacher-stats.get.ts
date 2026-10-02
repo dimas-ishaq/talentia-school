@@ -1,15 +1,20 @@
 import { and, count, eq, inArray } from 'drizzle-orm'
-import { attendance, courseClasses, courseTeachers, students, teachers } from '~~/server/database/schema'
+import { attendance, courseClasses, courseTeachers, courses, students, teachers } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  const { user, organization } = await requireOrganization(event)
   if (user.role !== 'teacher') throw createError({ statusCode: 403, statusMessage: 'Akses khusus guru' })
 
-  const teacher = await db.query.teachers.findFirst({ where: eq(teachers.userId, user.id), columns: { id: true } })
+  const teacher = await db.query.teachers.findFirst({ where: and(eq(teachers.userId, user.id), eq(teachers.organizationId, organization.id)), columns: { id: true } })
   if (!teacher) return { totalClasses: 0, totalStudents: 0, pendingGrading: 0, todayAttendance: 0 }
 
-  const coursesTaught = await db.select({ courseId: courseTeachers.courseId }).from(courseTeachers).where(eq(courseTeachers.teacherId, teacher.id))
+  const coursesTaught = await db
+    .select({ courseId: courseTeachers.courseId })
+    .from(courseTeachers)
+    .innerJoin(courses, and(eq(courseTeachers.courseId, courses.id), eq(courses.organizationId, organization.id)))
+    .where(eq(courseTeachers.teacherId, teacher.id))
   const courseIds = coursesTaught.map((row) => row.courseId)
   if (!courseIds.length) return { totalClasses: 0, totalStudents: 0, pendingGrading: 0, todayAttendance: 0 }
 

@@ -6,6 +6,7 @@ import {
   teachers, courseTeachers, quizAttempts, quizEvents, students,
 } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 export const PROCTOR_TOKEN_ROTATION_MINUTES = 5
 
@@ -51,8 +52,8 @@ export function verifyProctorToken(plain: string, sesi: any) {
 }
 
 export async function requireExamManager(event: any, eventId: string) {
-  const { user } = await requireUserSession(event)
-  const exam = await db.query.examEvents.findFirst({ where: eq(examEvents.id, eventId) })
+  const { user, organization } = await requireOrganization(event)
+  const exam = await db.query.examEvents.findFirst({ where: and(eq(examEvents.id, eventId), eq(examEvents.organizationId, organization.id)) })
   if (!exam) throw createError({ statusCode: 404, statusMessage: 'Event tidak ditemukan' })
   if (user.role === 'admin') return exam
   if (user.role !== 'teacher') throw createError({ statusCode: 403, statusMessage: 'Akses ditolak' })
@@ -71,7 +72,7 @@ export async function requireExamManager(event: any, eventId: string) {
 
 /** Hanya admin boleh membuat/mengubah blok sesi. */
 export async function requireExamSesiManager(event: any, sesiId: string) {
-  const { user } = await requireUserSession(event)
+  const { user } = await requireOrganization(event)
   const sesi = await db.query.examSesi.findFirst({ where: eq(examSesi.id, sesiId) })
   if (!sesi) throw createError({ statusCode: 404, statusMessage: 'Sesi tidak ditemukan' })
   if (user.role !== 'admin') throw createError({ statusCode: 403, statusMessage: 'Hanya admin yang mengelola sesi' })

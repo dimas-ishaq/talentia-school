@@ -2,11 +2,12 @@ import { and, eq, gte, lte, or, sql } from 'drizzle-orm'
 import { attendance } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
 import { allowedAttendanceScopes } from '~~/server/utils/attendanceAccess'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 // GET /api/attendance/summary?classId=&subjectId=&from=&to=
 // Rekap jumlah status per siswa sesuai filter aktif (rentang tanggal).
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  const { user, organization } = await requireOrganization(event)
   if (user.role !== 'admin' && user.role !== 'teacher') throw createError({ statusCode: 403, statusMessage: 'Akses absensi ditolak' })
 
   const query = getQuery(event)
@@ -17,6 +18,7 @@ export default defineEventHandler(async (event) => {
   const to = str('to')
 
   const conditions = [
+    eq(attendance.organizationId, organization.id),
     classId ? eq(attendance.classId, classId) : undefined,
     subjectId ? eq(attendance.subjectId, subjectId) : undefined,
     from ? gte(attendance.date, from) : undefined,

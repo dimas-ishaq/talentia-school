@@ -3,12 +3,13 @@
 import { and, asc, eq, inArray } from 'drizzle-orm'
 import { activities, sections, courses, courseClasses, students, activityProgress } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  const { user, organization } = await requireOrganization(event)
   if (user.role !== 'student') throw createError({ statusCode: 403, statusMessage: 'Hanya siswa' })
 
-  const student = await db.query.students.findFirst({ where: eq(students.userId, user.id), columns: { id: true, classId: true } })
+  const student = await db.query.students.findFirst({ where: and(eq(students.userId, user.id), eq(students.organizationId, organization.id)), columns: { id: true, classId: true } })
   if (!student?.classId) throw createError({ statusCode: 403, statusMessage: 'Data siswa tidak ditemukan' })
 
   const rows = await db
@@ -27,7 +28,7 @@ export default defineEventHandler(async (event) => {
     .innerJoin(sections, eq(activities.sectionId, sections.id))
     .innerJoin(courses, eq(sections.courseId, courses.id))
     .innerJoin(courseClasses, and(eq(courseClasses.courseId, courses.id), eq(courseClasses.classId, student.classId!)))
-    .where(and(eq(activities.type, 'assignment'), eq(activities.isVisible, true)))
+    .where(and(eq(courses.organizationId, organization.id), eq(activities.type, 'assignment'), eq(activities.isVisible, true)))
     .orderBy(asc(courses.name), asc(sections.position), asc(activities.position))
 
   if (!rows.length) return { data: [] }

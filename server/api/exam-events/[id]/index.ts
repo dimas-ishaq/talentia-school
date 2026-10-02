@@ -1,9 +1,10 @@
 // GET /api/exam-events/[id] — detail event (dengan subjects, classes, sessions per-class)
 // PATCH — edit event (admin)
 // DELETE — hapus event (draft saja, admin)
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { examEvents } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
+import { requireOrganization } from '~~/server/utils/tenant'
 import { z } from 'zod'
 
 const patchSchema = z.object({
@@ -18,15 +19,16 @@ const patchSchema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  const { user, organization } = await requireOrganization(event)
   const id = String(getRouterParam(event, 'id') ?? '')
-  const record = await db.query.examEvents.findFirst({ where: eq(examEvents.id, id) })
+  const scoped = and(eq(examEvents.id, id), eq(examEvents.organizationId, organization.id))
+  const record = await db.query.examEvents.findFirst({ where: scoped })
   if (!record) throw createError({ statusCode: 404, statusMessage: 'Event tidak ditemukan' })
 
   // GET
   if (event.method === 'GET') {
     const data = await db.query.examEvents.findFirst({
-      where: eq(examEvents.id, id),
+      where: scoped,
       with: {
         subjects: { with: { subject: true, examCourse: true, activity: true, subjectClasses: { with: { class: true } } } },
         classes: { with: { class: true } },
@@ -38,7 +40,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // PATCH / DELETE — admin only
-  if (!['admin'].includes(user.role)) {
+  if (!['admin', 'org_admin', 'owner'].includes(user.role)) {
     throw createError({ statusCode: 403, statusMessage: 'Hanya admin' })
   }
 

@@ -1,6 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm'
 import { attendance, courseClasses, courseTeachers, courses, teachers } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 /**
  * Ambil semua pasangan (classId, subjectId) yang boleh diakses user.
@@ -8,17 +9,17 @@ import { db } from '~~/server/utils/db'
  * - Guru  : dari course yang diampu (course punya subjectId + daftar kelas).
  */
 export async function allowedAttendanceScopes(event: Parameters<typeof requireUserSession>[0]) {
-  const { user } = await requireUserSession(event)
+  const { user, organization } = await requireOrganization(event)
   if (user.role === 'admin') return null
   if (user.role !== 'teacher') throw createError({ statusCode: 403, statusMessage: 'Akses absensi ditolak' })
 
-  const teacher = await db.query.teachers.findFirst({ where: eq(teachers.userId, user.id), columns: { id: true } })
+  const teacher = await db.query.teachers.findFirst({ where: and(eq(teachers.userId, user.id), eq(teachers.organizationId, organization.id)), columns: { id: true } })
   if (!teacher) throw createError({ statusCode: 404, statusMessage: 'Profil guru tidak ditemukan' })
 
   const courseRows = await db
     .select({ courseId: courseTeachers.courseId, subjectId: courses.subjectId })
     .from(courseTeachers)
-    .innerJoin(courses, eq(courseTeachers.courseId, courses.id))
+    .innerJoin(courses, and(eq(courseTeachers.courseId, courses.id), eq(courses.organizationId, organization.id)))
     .where(eq(courseTeachers.teacherId, teacher.id))
 
   const courseIds = courseRows.map((r) => r.courseId)
@@ -28,6 +29,7 @@ export async function allowedAttendanceScopes(event: Parameters<typeof requireUs
   const classRows = await db
     .select({ courseId: courseClasses.courseId, classId: courseClasses.classId })
     .from(courseClasses)
+    .innerJoin(courses, and(eq(courseClasses.courseId, courses.id), eq(courses.organizationId, organization.id)))
     .where(inArray(courseClasses.courseId, courseIds))
 
   const scopes = new Map<string, { classId: string; subjectId: string }>()
@@ -57,8 +59,9 @@ export async function requireAttendanceAccess(
 }
 
 export async function requireAttendanceRecordAccess(event: Parameters<typeof requireUserSession>[0], id: string) {
+  const { organization } = await requireOrganization(event)
   const row = await db.query.attendance.findFirst({
-    where: eq(attendance.id, id),
+    where: and(eq(attendance.id, id), eq(attendance.organizationId, organization.id)),
     columns: { classId: true, subjectId: true },
   })
   if (!row) throw createError({ statusCode: 404, statusMessage: 'Absensi tidak ditemukan' })

@@ -72,8 +72,8 @@ async function main() {
   const insUser = raw.prepare(
     'INSERT INTO users (id, organization_id, email, name, role, password, must_change_password, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?)',
   )
-  insUser.run('u_a', 'org_a', 'admin.a@sekolah.test', 'Admin A', 'org_admin', password, 1)
-  insUser.run('u_b', 'org_b', 'admin.b@sekolah.test', 'Admin B', 'org_admin', password, 1)
+  insUser.run('u_a', 'org_a', 'admin.a@sekolah.test', 'Admin A', 'admin', password, 1)
+  insUser.run('u_b', 'org_b', 'admin.b@sekolah.test', 'Admin B', 'admin', password, 1)
   const insMember = raw.prepare(
     'INSERT INTO organization_members (organization_id, user_id, role, status) VALUES (?, ?, ?, ?)',
   )

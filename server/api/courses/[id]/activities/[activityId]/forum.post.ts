@@ -8,18 +8,18 @@ import { evaluateCompletion } from '~~/server/utils/completion'
 const schema = z.object({ content: z.string().trim().min(1).max(5000), discussionId: z.string().uuid(), parentId: z.string().uuid().nullable().optional() })
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  const { user, organization } = await requireOrganization(event)
   const courseId = getRouterParam(event, 'id')!
   const activityId = getRouterParam(event, 'activityId')!
   const body = schema.parse(await readBody(event))
-  await findCourseOrThrow(courseId)
+  await findCourseOrThrow(courseId, organization.id)
   const activity = await db.query.activities.findFirst({ where: eq(activities.id, activityId) })
   if (!activity || activity.type !== 'forum') throw createError({ statusCode: 404, statusMessage: 'Forum tidak ditemukan' })
   const section = await db.query.sections.findFirst({ where: eq(sections.id, activity.sectionId) })
   if (!section || section.courseId !== courseId) throw createError({ statusCode: 404, statusMessage: 'Forum tidak ditemukan' })
   let studentId: string | null = null
   if (user.role === 'student') {
-    const student = await db.query.students.findFirst({ where: eq(students.userId, user.id), columns: { id: true, classId: true } })
+    const student = await db.query.students.findFirst({ where: and(eq(students.userId, user.id), eq(students.organizationId, organization.id)), columns: { id: true, classId: true } })
     const enrolled = student?.classId && await db.query.courseClasses.findFirst({ where: and(eq(courseClasses.courseId, courseId), eq(courseClasses.classId, student.classId)) })
     if (!student || !enrolled) throw createError({ statusCode: 403, statusMessage: 'Anda tidak terdaftar di course ini' })
     studentId = student.id

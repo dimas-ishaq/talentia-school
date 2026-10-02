@@ -2,6 +2,7 @@
 import { eq, and, inArray } from 'drizzle-orm'
 import { examSessions, examEventSubjects, examEvents, examSesi, quizAttempts, students, subjects, classes } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 function deriveStatus(session: any, attempt: any, now: number) {
   if (attempt?.lockStatus === 'locked') return 'terkunci'
@@ -13,10 +14,10 @@ function deriveStatus(session: any, attempt: any, now: number) {
 }
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  const { user, organization } = await requireOrganization(event)
   if (user.role !== 'student') throw createError({ statusCode: 403, statusMessage: 'Hanya siswa' })
 
-  const student = await db.query.students.findFirst({ where: eq(students.userId, user.id) })
+  const student = await db.query.students.findFirst({ where: and(eq(students.userId, user.id), eq(students.organizationId, organization.id)) })
   if (!student?.classId) return { data: [] }
 
   // Sessions untuk kelas siswa, hanya event published & sesi published

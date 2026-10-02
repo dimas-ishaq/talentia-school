@@ -6,11 +6,11 @@ import { findCourseOrThrow, isCourseManager } from '~~/server/utils/courseAccess
 
 const schema = z.object({ title: z.string().trim().min(1).max(200), question: z.string().trim().min(1).max(10000) })
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  const { user, organization } = await requireOrganization(event)
   const courseId = getRouterParam(event, 'id')!
   const activityId = getRouterParam(event, 'activityId')!
   const body = schema.parse(await readBody(event))
-  await findCourseOrThrow(courseId)
+  await findCourseOrThrow(courseId, organization.id)
   if (!['admin', 'org_admin', 'owner'].includes(user.role) && !await isCourseManager(user.id, courseId)) throw createError({ statusCode: 403, statusMessage: 'Hanya guru/admin' })
   const activity = await db.query.activities.findFirst({ where: eq(activities.id, activityId) })
   const section = activity && await db.query.sections.findFirst({ where: eq(sections.id, activity.sectionId) })

@@ -4,16 +4,17 @@ import { eq, and } from 'drizzle-orm'
 import { students, finalGrades } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
 import { findCourseOrThrow } from '~~/server/utils/courseAccess'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  const { user, organization } = await requireOrganization(event)
   const courseId = getRouterParam(event, 'id')!
-  await findCourseOrThrow(courseId)
+  await findCourseOrThrow(courseId, organization.id)
 
   if (user.role !== 'student') throw createError({ statusCode: 403, statusMessage: 'Hanya siswa' })
 
   const student = await db.query.students.findFirst({
-    where: eq(students.userId, user.id),
+    where: and(eq(students.userId, user.id), eq(students.organizationId, organization.id)),
     columns: { id: true },
   })
   if (!student) return { data: null }

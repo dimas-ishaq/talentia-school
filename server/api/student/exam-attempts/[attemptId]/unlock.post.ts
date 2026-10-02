@@ -9,13 +9,13 @@ const schema = z.object({ token: z.string().trim().min(1).max(50) })
 
 export default defineEventHandler(async (event) => {
   const attemptId = String(getRouterParam(event, 'attemptId') ?? '')
-  const { user } = await requireUserSession(event)
+  const { user, organization } = await requireOrganization(event)
   if (user.role !== 'student') throw createError({ statusCode: 403, statusMessage: 'Hanya siswa' })
 
   const body = schema.parse(await readBody(event))
 
   // Cek ownership & kondisi locked
-  const student = await db.query.students.findFirst({ where: eq(students.userId, user.id) })
+  const student = await db.query.students.findFirst({ where: and(eq(students.userId, user.id), eq(students.organizationId, organization.id)) })
   if (!student) throw createError({ statusCode: 403, statusMessage: 'Data siswa tidak ditemukan' })
   const attempt = await db.query.quizAttempts.findFirst({
     where: and(eq(quizAttempts.id, attemptId), eq(quizAttempts.studentId, student.id)),

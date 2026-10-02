@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { requireQuizActivity, requireEnrolledStudent } from '~~/server/utils/quiz'
 import { requireAttemptOwner, logQuizEvent, enforceQuizRateLimit } from '~~/server/utils/quizSecurity'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 const schema = z.object({
   attemptId: z.string().uuid(),
@@ -11,10 +12,11 @@ const schema = z.object({
 export default defineEventHandler(async (event) => {
   const courseId = getRouterParam(event, 'id')!
   const quizId = getRouterParam(event, 'quizId')!
-  const { user } = await requireUserSession(event)
+  const { user, organization } = await requireOrganization(event)
   if (user.role !== 'student') throw createError({ statusCode: 403, statusMessage: 'Hanya siswa' })
   await requireQuizActivity(event, courseId, quizId)
   const student = await requireEnrolledStudent(user.id, courseId)
+  if (student.organizationId !== organization.id) throw createError({ statusCode: 403, statusMessage: 'Akses ditolak' })
   const body = schema.parse(await readBody(event))
 
   enforceQuizRateLimit(`quiz-event:${student.id}:${body.attemptId}`, 60, 60_000)

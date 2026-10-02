@@ -6,18 +6,19 @@ import { eq, and } from 'drizzle-orm'
 import { activities, students, courseClasses, sections, activityProgress } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
 import { findCourseOrThrow } from '~~/server/utils/courseAccess'
+import { requireOrganization } from '~~/server/utils/tenant'
 import { evaluateCompletion } from '~~/server/utils/completion'
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  const { user, organization } = await requireOrganization(event)
   if (user.role !== 'student') throw createError({ statusCode: 403, statusMessage: 'Hanya siswa' })
 
   const courseId = getRouterParam(event, 'id')!
   const activityId = getRouterParam(event, 'activityId')!
-  await findCourseOrThrow(courseId)
+  await findCourseOrThrow(courseId, organization.id)
 
   const student = await db.query.students.findFirst({
-    where: eq(students.userId, user.id),
+    where: and(eq(students.userId, user.id), eq(students.organizationId, organization.id)),
     columns: { id: true, classId: true },
   })
   if (!student?.classId) throw createError({ statusCode: 403, statusMessage: 'Data siswa tidak ditemukan' })

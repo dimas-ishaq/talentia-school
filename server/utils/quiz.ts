@@ -2,10 +2,15 @@
 import { eq, and, asc, count, sql } from 'drizzle-orm'
 import { activities, sections, students, courseClasses, questionBank, questionOptions, quizQuestions, quizAttempts, quizAttemptAnswers, activityProgress, quizEvents } from '~~/server/database/schema'
 import { evaluateCompletion } from '~~/server/utils/completion'
+import { findCourseOrThrow } from '~~/server/utils/courseAccess'
+import { requireOrganization } from '~~/server/utils/tenant'
 import { db } from '~~/server/utils/db'
 
-/** Throw 404/403 if activity is not a quiz or user lacks access */
+/** Throw 404/403 if activity is not a quiz or user lacks access.
+ *  Tenant-scoped: course wajib milik organisasi user (lihat findCourseOrThrow). */
 export async function requireQuizActivity(event: any, courseId: string, activityId: string) {
+  const { organization } = await requireOrganization(event)
+  await findCourseOrThrow(courseId, organization.id)
   const activity = await db.query.activities.findFirst({ where: eq(activities.id, activityId) })
   if (!activity) throw createError({ statusCode: 404, statusMessage: 'Activity tidak ditemukan' })
   if (activity.type !== 'quiz') throw createError({ statusCode: 400, statusMessage: 'Activity bukan quiz' })
@@ -25,7 +30,8 @@ export async function assertQuizEditable(activityId: string) {
 
 export async function requireEnrolledStudent(userId: string, courseId: string) {
   const student = await db.query.students.findFirst({ where: eq(students.userId, userId) })
-  if (!student?.classId) throw createError({ statusCode: 403, statusMessage: 'Data siswa tidak ditemukan' })
+  if (!student?.classId || !student.organizationId) throw createError({ statusCode: 403, statusMessage: 'Data siswa tidak ditemukan' })
+  // ponytail: enrollment tidak menyimpan organization_id — validasi tenant via student.organizationId + course.organizationId di pemanggil (requireQuizActivity).
   const enrolled = await db.query.courseClasses.findFirst({
     where: and(eq(courseClasses.courseId, courseId), eq(courseClasses.classId, student.classId)),
   })

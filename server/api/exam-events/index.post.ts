@@ -2,6 +2,7 @@
 import { z } from 'zod'
 import { examEvents } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 const schema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -14,8 +15,8 @@ const schema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
-  if (user.role !== 'admin') throw createError({ statusCode: 403, statusMessage: 'Hanya admin' })
+  const { user, organization } = await requireOrganization(event)
+  if (!['admin', 'org_admin', 'owner'].includes(user.role)) throw createError({ statusCode: 403, statusMessage: 'Hanya admin' })
 
   const body = schema.parse(await readBody(event))
   if (body.endDate < body.startDate) {
@@ -28,6 +29,7 @@ export default defineEventHandler(async (event) => {
   const id = crypto.randomUUID()
   await db.insert(examEvents).values({
     id,
+    organizationId: organization.id,
     ...body,
     description: body.description || null,
     status: 'draft',

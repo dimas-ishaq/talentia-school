@@ -10,7 +10,7 @@ const ALLOWED_MIME = new Set(['application/pdf', 'application/msword', 'applicat
 const KIND: Record<string, string> = { '.pdf': 'pdf', '.doc': 'document', '.docx': 'document', '.ppt': 'presentation', '.pptx': 'presentation', '.xls': 'spreadsheet', '.xlsx': 'spreadsheet', '.txt': 'text', '.csv': 'spreadsheet', '.png': 'image', '.jpg': 'image', '.jpeg': 'image', '.gif': 'image', '.webp': 'image', '.mp4': 'video', '.webm': 'video', '.mov': 'video' }
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  const { user, organization } = await requireOrganization(event)
   if (!['admin', 'org_admin', 'owner', 'teacher', 'student'].includes(user.role)) throw createError({ statusCode: 403, statusMessage: 'Akun tidak dapat mengunggah file' })
   const form = await readMultipartFormData(event)
   const filePart = form?.find((part) => part.name === 'file' && part.filename)

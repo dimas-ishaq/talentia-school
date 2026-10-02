@@ -15,10 +15,10 @@ const schema = z.object({
 
 export default defineEventHandler(async (event) => {
   const attemptId = String(getRouterParam(event, 'attemptId') ?? '')
-  const { user } = await requireUserSession(event)
+  const { user, organization } = await requireOrganization(event)
   if (user.role !== 'student') throw createError({ statusCode: 403, statusMessage: 'Hanya siswa' })
 
-  const student = await db.query.students.findFirst({ where: eq(students.userId, user.id) })
+  const student = await db.query.students.findFirst({ where: and(eq(students.userId, user.id), eq(students.organizationId, organization.id)) })
   if (!student) throw createError({ statusCode: 403, statusMessage: 'Data siswa tidak ditemukan' })
 
   const attempt = await db.query.quizAttempts.findFirst({

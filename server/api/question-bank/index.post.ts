@@ -1,6 +1,8 @@
 import { z } from 'zod'
-import { questionBank, questionOptions } from '~~/server/database/schema'
+import { and, eq } from 'drizzle-orm'
+import { questionBank, questionOptions, courses } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 const optionSchema = z.object({
   label: z.string().trim().min(1).max(4),
@@ -21,12 +23,18 @@ const schema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  // ponytail: question_bank tanpa kolom organization_id. Isolasi tenant via creator membership.
+  // Tambah kolom organization_id saat >10 sekolah / butuh filter DB-level.
+  const { user, organization } = await requireOrganization(event)
   if (!['admin', 'teacher'].includes(user.role)) {
     throw createError({ statusCode: 403, statusMessage: 'Hanya guru atau admin' })
   }
 
   const body = schema.parse(await readBody(event))
+  if (body.courseId) {
+    const course = await db.query.courses.findFirst({ where: and(eq(courses.id, body.courseId), eq(courses.organizationId, organization.id)), columns: { id: true } })
+    if (!course) throw createError({ statusCode: 404, statusMessage: 'Course tidak ditemukan' })
+  }
   if (body.type === 'multiple_choice') {
     if (body.options.length < 2) throw createError({ statusCode: 400, statusMessage: 'Minimal 2 pilihan jawaban' })
     if (!body.options.some((o) => o.isCorrect)) throw createError({ statusCode: 400, statusMessage: 'Tentukan jawaban benar' })

@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { questionBank, questionOptions } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 const schema = z.object({
   scope: z.enum(['global', 'category', 'course', 'quiz']).optional(),
@@ -12,7 +13,8 @@ const schema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  // ponytail: question_bank tanpa kolom organization_id. Tenant via creator membership (lihat server/api/question-bank/index.get.ts).
+  const { user } = await requireOrganization(event)
   if (!['admin', 'teacher'].includes(user.role)) throw createError({ statusCode: 403, statusMessage: 'Hanya guru atau admin' })
   const id = getRouterParam(event, 'id')!
   const body = schema.parse(await readBody(event))

@@ -2,12 +2,13 @@ import { asc, eq } from 'drizzle-orm'
 import { activities, forumDiscussions, forumPosts, sections, users } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
 import { findCourseOrThrow } from '~~/server/utils/courseAccess'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  const { user, organization } = await requireOrganization(event)
   const courseId = getRouterParam(event, 'id')!
   const activityId = getRouterParam(event, 'activityId')!
-  await findCourseOrThrow(courseId)
+  await findCourseOrThrow(courseId, organization.id)
   const activity = await db.query.activities.findFirst({ where: eq(activities.id, activityId) })
   const section = activity && await db.query.sections.findFirst({ where: eq(sections.id, activity.sectionId) })
   if (!activity || activity.type !== 'forum' || !section || section.courseId !== courseId || (user.role === 'student' && !activity.isVisible)) throw createError({ statusCode: 404, statusMessage: 'Forum tidak ditemukan' })

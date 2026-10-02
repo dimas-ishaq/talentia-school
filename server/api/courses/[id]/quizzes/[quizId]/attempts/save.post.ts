@@ -18,7 +18,7 @@ const schema = z.object({
 export default defineEventHandler(async (event) => {
   const courseId = getRouterParam(event, 'id')!
   const quizId = getRouterParam(event, 'quizId')!
-  const { user } = await requireUserSession(event)
+  const { user, organization } = await requireOrganization(event)
   if (user.role !== 'student') throw createError({ statusCode: 403, statusMessage: 'Hanya siswa' })
   const activity = await requireQuizActivity(event, courseId, quizId)
   const student = await requireEnrolledStudent(user.id, courseId)

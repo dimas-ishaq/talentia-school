@@ -2,13 +2,16 @@ import { and, eq, asc } from 'drizzle-orm'
 import { quizAttempts, quizAttemptAnswers, quizQuestions } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
 import { requireQuizActivity, requireEnrolledStudent, canStudentSeeScore, canStudentSeeReview } from '~~/server/utils/quiz'
-import { isCourseManager } from '~~/server/utils/courseAccess'
+import { isCourseManager, findCourseOrThrow } from '~~/server/utils/courseAccess'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 export default defineEventHandler(async (event) => {
   const courseId = getRouterParam(event, 'id')!
   const quizId = getRouterParam(event, 'quizId')!
   const attemptId = getRouterParam(event, 'attemptId')!
-  const { user } = await requireUserSession(event)
+  const { user, organization } = await requireOrganization(event)
+  // Tenant-scoped: course sekolah lain → 404 sebelum attempt dibaca (admin pun).
+  await findCourseOrThrow(courseId, organization.id)
   const activity = await requireQuizActivity(event, courseId, quizId)
 
   const isManager = user.role === 'admin' || (user.role === 'teacher' && (await isCourseManager(user.id, courseId)))

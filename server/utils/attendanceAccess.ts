@@ -47,8 +47,8 @@ export async function requireAttendanceAccess(
   classId?: string,
   subjectId?: string,
 ) {
-  const { user } = await requireUserSession(event)
-  if (user.role === 'admin') return user
+  const { user, organization } = await requireOrganization(event)
+  if (user.role === 'admin' || user.role === 'org_admin' || user.role === 'owner') return user
   if (user.role !== 'teacher') throw createError({ statusCode: 403, statusMessage: 'Akses absensi ditolak' })
   if (!classId || !subjectId) return user
 
@@ -59,13 +59,12 @@ export async function requireAttendanceAccess(
 }
 
 export async function requireAttendanceRecordAccess(event: Parameters<typeof requireUserSession>[0], id: string) {
-  const { organization } = await requireOrganization(event)
+  const { user, organization } = await requireOrganization(event)
   const row = await db.query.attendance.findFirst({
     where: and(eq(attendance.id, id), eq(attendance.organizationId, organization.id)),
     columns: { classId: true, subjectId: true },
   })
   if (!row) throw createError({ statusCode: 404, statusMessage: 'Absensi tidak ditemukan' })
-  const { user } = await requireUserSession(event)
   // Data lama tanpa mapel tetap terlihat sebagai histori, tetapi tidak boleh diedit guru.
   if (user.role !== 'admin' && !row.subjectId) throw createError({ statusCode: 403, statusMessage: 'Data absensi lama hanya dapat diubah admin' })
   await requireAttendanceAccess(event, row.classId, row.subjectId ?? undefined)

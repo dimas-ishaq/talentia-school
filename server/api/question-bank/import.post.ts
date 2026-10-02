@@ -1,7 +1,9 @@
 import { z } from 'zod'
-import { questionBank, questionOptions } from '~~/server/database/schema'
+import { and, eq } from 'drizzle-orm'
+import { questionBank, questionOptions, courses } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
 import { parseAiken, parseCsvQuestions } from '~~/server/utils/quiz'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 const schema = z.object({
   format: z.enum(['aiken', 'csv']),
@@ -13,9 +15,14 @@ const schema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  // ponytail: question_bank tanpa kolom organization_id. Tenant via creator membership.
+  const { user, organization } = await requireOrganization(event)
   if (!['admin', 'teacher'].includes(user.role)) throw createError({ statusCode: 403, statusMessage: 'Hanya guru atau admin' })
   const body = schema.parse(await readBody(event))
+  if (body.courseId) {
+    const course = await db.query.courses.findFirst({ where: and(eq(courses.id, body.courseId), eq(courses.organizationId, organization.id)), columns: { id: true } })
+    if (!course) throw createError({ statusCode: 404, statusMessage: 'Course tidak ditemukan' })
+  }
   const parsed = body.format === 'aiken' ? parseAiken(body.text) : parseCsvQuestions(body.text)
   if (!parsed.length) throw createError({ statusCode: 400, statusMessage: 'Format soal tidak valid atau tidak ada soal' })
 

@@ -1,9 +1,11 @@
 import { eq } from 'drizzle-orm'
 import { questionBank } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  // ponytail: question_bank tanpa kolom organization_id. Tenant via creator membership.
+  const { user } = await requireOrganization(event)
   if (!['admin', 'teacher'].includes(user.role)) throw createError({ statusCode: 403, statusMessage: 'Hanya guru atau admin' })
   const id = getRouterParam(event, 'id')!
   const existing = await db.query.questionBank.findFirst({ where: eq(questionBank.id, id) })

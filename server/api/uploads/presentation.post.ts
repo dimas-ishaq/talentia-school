@@ -12,7 +12,7 @@ const MIME = new Set([
 ])
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  const { user, organization } = await requireOrganization(event)
   if (!['admin', 'org_admin', 'owner', 'teacher'].includes(user.role)) {
     throw createError({ statusCode: 403, statusMessage: 'Hanya guru atau admin yang dapat mengunggah presentasi' })
   }

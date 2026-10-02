@@ -1,17 +1,18 @@
-import { eq, count as drizzleCount, inArray } from 'drizzle-orm'
+import { eq, and, count as drizzleCount, inArray } from 'drizzle-orm'
 import { courses, courseTeachers, teachers, sections, activities, quizAttempts } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
-  if (user.role !== 'teacher' && user.role !== 'admin') throw createError({ statusCode: 403, statusMessage: 'Hanya guru/admin' })
+  const { user, organization } = await requireOrganization(event)
+  if (user.role !== 'teacher' && user.role !== 'admin' && user.role !== 'org_admin' && user.role !== 'owner') throw createError({ statusCode: 403, statusMessage: 'Hanya guru/admin' })
 
   let courseIds: string[]
-  if (user.role === 'admin') {
-    const all = await db.select({ id: courses.id }).from(courses)
+  if (['admin', 'org_admin', 'owner'].includes(user.role)) {
+    const all = await db.select({ id: courses.id }).from(courses).where(eq(courses.organizationId, organization.id))
     courseIds = all.map((c) => c.id)
   } else {
-    const teacher = await db.query.teachers.findFirst({ where: eq(teachers.userId, user.id) })
+    const teacher = await db.query.teachers.findFirst({ where: and(eq(teachers.userId, user.id), eq(teachers.organizationId, organization.id)) })
     if (!teacher) return { data: [] }
     const links = await db.select({ courseId: courseTeachers.courseId }).from(courseTeachers).where(eq(courseTeachers.teacherId, teacher.id))
     courseIds = links.map((l) => l.courseId)

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { attendance } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
 import { requireAttendanceRecordAccess } from '~~/server/utils/attendanceAccess'
+import { requireOrganization } from '~~/server/utils/tenant'
 import { writeAuditLog } from '~~/server/utils/audit'
 
 const schema = z.object({
@@ -15,9 +16,9 @@ export default defineEventHandler(async (event) => {
   if (!id) throw createError({ statusCode: 400, statusMessage: 'ID absensi diperlukan' })
   const body = schema.parse(await readBody(event))
 
-  // Admin boleh semua; guru hanya kelas yang diampu.
+  // Admin boleh semua; guru hanya kelas yang diampu. Guard tenant di requireAttendanceRecordAccess.
   await requireAttendanceRecordAccess(event, id)
-  const { user } = await requireUserSession(event)
+  const { user } = await requireOrganization(event)
 
   const [updated] = await db
     .update(attendance)

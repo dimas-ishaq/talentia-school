@@ -3,16 +3,18 @@ import { quizAttempts, quizQuestions, quizAttemptAnswers, quizEvents } from '~~/
 import { db } from '~~/server/utils/db'
 import { requireQuizActivity, requireEnrolledStudent, canStudentSeeScore } from '~~/server/utils/quiz'
 import { enforceQuizRateLimit } from '~~/server/utils/quizSecurity'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 /** Meta info sebelum mulai: jumlah soal, durasi, aturan, dll. tanpa membocorkan soal. */
 export default defineEventHandler(async (event) => {
   const courseId = getRouterParam(event, 'id')!
   const quizId = getRouterParam(event, 'quizId')!
-  const { user } = await requireUserSession(event)
+  const { user, organization } = await requireOrganization(event)
   if (user.role !== 'student') throw createError({ statusCode: 403, statusMessage: 'Hanya siswa' })
 
   const activity = await requireQuizActivity(event, courseId, quizId)
   const student = await requireEnrolledStudent(user.id, courseId)
+  if (student.organizationId !== organization.id) throw createError({ statusCode: 403, statusMessage: 'Akses ditolak' })
   enforceQuizRateLimit(`quiz-info:${student.id}:${quizId}`, 20, 60_000)
 
   if (activity.status === 'draft') throw createError({ statusCode: 400, statusMessage: 'Quiz belum dipublikasikan' })

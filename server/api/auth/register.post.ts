@@ -29,42 +29,53 @@ export default defineEventHandler(async (event) => {
   const username = body.username.trim()
 
   const existingEmail = await db.query.users.findFirst({ where: eq(users.email, email), columns: { id: true } })
-  if (existingEmail) {
-    throw createError({ statusCode: 409, statusMessage: 'Email sudah terdaftar', data: { field: 'email' } })
-  }
+  if (existingEmail) throw createError({ statusCode: 409, statusMessage: 'Email sudah terdaftar', data: { field: 'email' } })
   const existingUsername = await db.query.users.findFirst({ where: eq(users.name, username), columns: { id: true } })
-  if (existingUsername) {
-    throw createError({ statusCode: 409, statusMessage: 'Username sudah dipakai', data: { field: 'username' } })
-  }
+  if (existingUsername) throw createError({ statusCode: 409, statusMessage: 'Username sudah dipakai', data: { field: 'username' } })
 
   const hashedPassword = await bcrypt.hash(body.password, 10)
-
   const userId = crypto.randomUUID()
   const organizationId = crypto.randomUUID()
-
-  // Slug unik: tambah suffix bila sudah dipakai.
-  const baseSlug = slugify(body.organizationName)
-  let slug = baseSlug
-  for (let i = 2; i < 50; i++) {
-    const clash = await db.query.organizations.findFirst({ where: eq(organizations.slug, slug), columns: { id: true } })
-    if (!clash) break
-    slug = `${baseSlug}-${i}`
-  }
+  const name = body.organizationName.trim()
+  const baseSlug = slugify(name)
 
   // Pilot terkelola: org baru suspended, operator mengaktifkan manual setelah verifikasi.
-  // ponytail: tanpa transaction untuk kompatibilitas better-sqlite3 (sync txn) + postgres;
-  // konsisten atomik saat butuh: migrasi ke driver-specific txn.
-  await db.insert(organizations).values({ id: organizationId, name: body.organizationName.trim(), slug, status: 'suspended' })
-  const [created] = await db
-    .insert(users)
-    .values({ id: userId, organizationId, email, name: username, role: 'admin', password: hashedPassword })
-    .returning()
-  if (!created) throw createError({ statusCode: 500, statusMessage: 'Gagal membuat akun' })
-  await db.insert(organizationMembers).values({ organizationId, userId, role: 'owner', status: 'active' })
+  // better-sqlite3 tidak mendukung async transaction (sync only); jaga atomik
+  // lewat retry slug pada constraint + kompensasi hapus bila insert berikutnya gagal.
+  // Postgres: driver async, tapi pilot tetap pakai path kompensasi yang sama (YAGNI).
+  let slug = baseSlug
+  let orgCreated = false
+  for (let attempt = 0; attempt < 50; attempt++) {
+    try {
+      await db.insert(organizations).values({ id: organizationId, name, slug, status: 'suspended' })
+      orgCreated = true
+      break
+    } catch (err: any) {
+      const msg = String(err?.message ?? '')
+      const uniqueViolation = /UNIQUE constraint failed: organizations\.slug/i.test(msg) || /duplicate key value violates unique constraint/i.test(msg)
+      if (!uniqueViolation) throw err
+      if (attempt === 49) throw err
+      slug = `${baseSlug}-${attempt + 2}`
+    }
+  }
+
+  let userCreated = false
+  let created: any
+  try {
+    const rows = await db
+      .insert(users)
+      .values({ id: userId, organizationId, email, name: username, role: 'admin', password: hashedPassword })
+      .returning()
+    created = rows[0]
+    if (!created) throw createError({ statusCode: 500, statusMessage: 'Gagal membuat akun' })
+    userCreated = true
+    await db.insert(organizationMembers).values({ organizationId, userId, role: 'owner', status: 'active' })
+  } catch (err) {
+    if (userCreated) await db.delete(users).where(eq(users.id, userId)).catch(() => {})
+    if (orgCreated) await db.delete(organizations).where(eq(organizations.id, organizationId)).catch(() => {})
+    throw err
+  }
 
   setResponseStatus(event, 201)
-  return {
-    success: true,
-    user: { id: created.id, email: created.email, name: created.name, role: 'owner' },
-  }
+  return { success: true, user: { id: created.id, email: created.email, name: created.name, role: 'owner' } }
 })

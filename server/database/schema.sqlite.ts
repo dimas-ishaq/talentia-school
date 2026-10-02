@@ -67,8 +67,8 @@ export const teachers = sqliteTable('teachers', {
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' })
     .unique(),
-  code: text('code').unique(),          // Kode guru (G001, TCH2024, dll)
-  nip: text('nip').unique(),            // Nomor Induk Pegawai
+  code: text('code'),          // Kode guru (G001, TCH2024, dll) — unique per org via uniqueIndex
+  nip: text('nip'),            // Nomor Induk Pegawai — unique per org via uniqueIndex
   phone: text('phone'),
   address: text('address'),
   subject: text('subject'),              // mapel yang diampu

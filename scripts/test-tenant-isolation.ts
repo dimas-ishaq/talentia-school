@@ -92,6 +92,13 @@ async function main() {
   insMember.run('org_b', 'u_b', 'org_admin', 'active')
   insUser.run('u_siswa_a', 'org_a', 'siswa.a@sekolah.test', 'Siswa A', 'student', password, 1)
   insUser.run('u_siswa_b', 'org_b', 'siswa.b@sekolah.test', 'Siswa B', 'student', password, 1)
+  insUser.run('u_teacher_a', 'org_a', 'guru.a@sekolah.test', 'Guru A', 'teacher', password, 1)
+  insUser.run('u_teacher_b', 'org_b', 'guru.b@sekolah.test', 'Guru B', 'teacher', password, 1)
+  const insTeacher = raw.prepare(
+    'INSERT INTO teachers (id, organization_id, user_id, nip, is_active, created_at) VALUES (?, ?, ?, ?, 1, ?)',
+  )
+  insTeacher.run('teacher_a', 'org_a', 'u_teacher_a', 'NIP-A', 1)
+  insTeacher.run('teacher_b', 'org_b', 'u_teacher_b', 'NIP-B', 2)
   const insStudent = raw.prepare(
     'INSERT INTO students (id, organization_id, user_id, nis, gender, is_active, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)',
   )
@@ -281,6 +288,17 @@ async function main() {
       // Akun suspended tidak boleh login/akses tenant
       const badLogin = await post('/api/auth/login', { email, password: PASSWORD })
       assert.equal(badLogin.status, 403, `login akun suspended harus 403, dapat ${badLogin.status} ${JSON.stringify(badLogin.body)}`)
+    })
+    await check('GET /api/teachers/teacher_b sebagai admin A → 404 (IDOR guru)', async () => {
+      const res = await api(cookieA, '/api/teachers/teacher_b')
+      assert.equal(res.status, 404, `cross-tenant read harus 404, dapat ${res.status} ${JSON.stringify(res.body)}`)
+    })
+    await check('PATCH /api/teachers/teacher_b sebagai admin A → 404', async () => {
+      const res = await fetch(`${BASE}/api/teachers/teacher_b`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json', cookie: cookieA },
+        body: JSON.stringify({ name: 'Hacked', nip: 'NIP-B' }),
+      })
+      assert.equal(res.status, 404, `cross-tenant patch harus 404, dapat ${res.status} ${await res.text()}`)
     })
     await check('GET /api/organizations/billing menghitung per org is_active', async () => {
       const res = await api(cookieA, '/api/organizations/billing')

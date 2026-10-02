@@ -83,10 +83,12 @@ export async function ensureExamCourse(params: {
   subjectId: string
   subjectName: string
   createdBy: string
+  organizationId: string
 }): Promise<{ examCourseId: string; activityId: string }> {
   const courseId = crypto.randomUUID()
   await db.insert(courses).values({
     id: courseId,
+    organizationId: params.organizationId,
     name: `${params.subjectName} (Ujian)`,
     code: null,
     description: `Soal ujian — ${params.subjectName}`,

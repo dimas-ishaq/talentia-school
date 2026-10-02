@@ -17,7 +17,7 @@ export default defineEventHandler(async (event) => {
   const courseId = getRouterParam(event, 'id')!
   const activityId = getRouterParam(event, 'activityId')!
   const { user } = await requireUserSession(event)
-  const manager = await requireCourseManager(event, courseId)
+  const course = await requireCourseManager(event, courseId)
   const body = schema.parse(await readBody(event))
 
   const [activity] = await db
@@ -29,7 +29,10 @@ export default defineEventHandler(async (event) => {
   if (!activity) throw createError({ statusCode: 404, statusMessage: 'Activity tidak ditemukan' })
   if (!['assignment', 'forum'].includes(activity.type)) throw createError({ statusCode: 400, statusMessage: 'Hanya tugas dan forum yang bisa dikembalikan' })
 
-  const st = await db.query.students.findFirst({ where: eq(students.id, body.studentId), columns: { id: true } })
+  const st = await db.query.students.findFirst({
+    where: and(eq(students.id, body.studentId), eq(students.organizationId, course.organizationId!)),
+    columns: { id: true },
+  })
   if (!st) throw createError({ statusCode: 404, statusMessage: 'Siswa tidak ditemukan' })
 
   const existing = await db.query.activityProgress.findFirst({

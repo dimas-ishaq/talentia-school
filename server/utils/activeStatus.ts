@@ -1,12 +1,14 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '~~/server/utils/db'
 import { requireAdmin } from '~~/server/utils/requireAdmin'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 const activeStatusSchema = z.object({ isActive: z.boolean() })
 
 export function createActiveStatusHandler(table: any, label: string) {
   return defineEventHandler(async (event) => {
+    const { organization } = await requireOrganization(event)
     await requireAdmin(event)
 
     const id = getRouterParam(event, 'id')
@@ -20,7 +22,7 @@ export function createActiveStatusHandler(table: any, label: string) {
     const [updated] = await db
       .update(table)
       .set({ isActive: parsed.data.isActive })
-      .where(eq(table.id, id))
+      .where(and(eq(table.id, id), eq(table.organizationId, organization.id)))
       .returning({ id: table.id })
 
     if (!updated) {

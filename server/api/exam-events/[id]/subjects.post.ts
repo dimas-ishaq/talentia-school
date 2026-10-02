@@ -4,10 +4,11 @@ import { z } from 'zod'
 import { eq, and } from 'drizzle-orm'
 import {
   examEvents, examEventSubjects, examEventClasses, examEventSubjectClasses, examSessions, examSesi,
-  subjects, courseTeachers,
+  subjects, teachers, courseTeachers,
 } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
 import { requireExamManager, ensureExamCourse, generateToken, hashToken } from '~~/server/utils/exam'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 const schema = z.object({
   subjectId: z.string().trim().min(1),
@@ -28,11 +29,12 @@ const schema = z.object({
 
 export default defineEventHandler(async (event) => {
   const eventId = String(getRouterParam(event, 'id') ?? '')
+  const { organization } = await requireOrganization(event)
   await requireExamManager(event, eventId)
   const { user } = await requireUserSession(event)
   const body = schema.parse(await readBody(event))
 
-  const ev = await db.query.examEvents.findFirst({ where: eq(examEvents.id, eventId) })
+  const ev = await db.query.examEvents.findFirst({ where: and(eq(examEvents.id, eventId), eq(examEvents.organizationId, organization.id)) })
   if (!ev) throw createError({ statusCode: 404, statusMessage: 'Event tidak ditemukan' })
 
   const sesi = await db.query.examSesi.findFirst({
@@ -40,7 +42,7 @@ export default defineEventHandler(async (event) => {
   })
   if (!sesi) throw createError({ statusCode: 404, statusMessage: 'Sesi tidak ditemukan di event ini' })
 
-  const subject = await db.query.subjects.findFirst({ where: eq(subjects.id, body.subjectId) })
+  const subject = await db.query.subjects.findFirst({ where: and(eq(subjects.id, body.subjectId), eq(subjects.organizationId, organization.id)) })
   if (!subject) throw createError({ statusCode: 404, statusMessage: 'Mapel tidak ditemukan' })
 
   const eventClasses = await db.query.examEventClasses.findMany({ where: eq(examEventClasses.eventId, eventId) })
@@ -59,13 +61,14 @@ export default defineEventHandler(async (event) => {
     subjectId: body.subjectId,
     subjectName: subject.name,
     createdBy: user.id,
+    organizationId: organization.id,
   })
 
-  // Guru pengampu (multi-guru)
+  // Guru pengampu (multi-guru) — hanya guru di organisasi yang sama.
   const teacherIds = [...new Set(body.teacherIds)]
   if (teacherIds.length) {
-    const valid = await db.query.teachers.findMany({ columns: { id: true } })
-    const validIds = new Set(valid.map((t) => t.id))
+    const owned = await db.query.teachers.findMany({ where: eq(teachers.organizationId, organization.id), columns: { id: true } })
+    const validIds = new Set(owned.map((t) => t.id))
     const rows = teacherIds.filter((id) => validIds.has(id)).map((tid) => ({ courseId: examCourseId, teacherId: tid }))
     if (rows.length) await db.insert(courseTeachers).values(rows)
   }

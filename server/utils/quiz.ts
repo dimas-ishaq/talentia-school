@@ -29,9 +29,11 @@ export async function assertQuizEditable(activityId: string) {
 }
 
 export async function requireEnrolledStudent(userId: string, courseId: string) {
-  const student = await db.query.students.findFirst({ where: eq(students.userId, userId) })
+  const course = await findCourseOrThrow(courseId)
+  if (!course.organizationId) throw createError({ statusCode: 503, statusMessage: 'Course tanpa organisasi' })
+  const student = await db.query.students.findFirst({ where: and(eq(students.userId, userId), eq(students.organizationId, course.organizationId)) })
   if (!student?.classId || !student.organizationId) throw createError({ statusCode: 403, statusMessage: 'Data siswa tidak ditemukan' })
-  // ponytail: enrollment tidak menyimpan organization_id — validasi tenant via student.organizationId + course.organizationId di pemanggil (requireQuizActivity).
+  // Enrollment tidak menyimpan organization_id; student + course tenant harus sama.
   const enrolled = await db.query.courseClasses.findFirst({
     where: and(eq(courseClasses.courseId, courseId), eq(courseClasses.classId, student.classId)),
   })

@@ -1,8 +1,9 @@
 // server/api/teachers/[id].patch.ts
-import { db } from '~~/server/utils/db'
-import { teachers, users } from '~~/server/database/schema'
-import { eq, and, ne } from 'drizzle-orm'
+import { and, eq, ne } from 'drizzle-orm'
 import { z } from 'zod'
+import { teachers, users } from '~~/server/database/schema'
+import { db } from '~~/server/utils/db'
+import { requireOrganizationAdmin } from '~~/server/utils/tenant'
 
 const updateTeacherSchema = z.object({
   name: z.string().min(1, 'Nama wajib diisi').max(100),
@@ -14,73 +15,42 @@ const updateTeacherSchema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
+  const { organization } = await requireOrganizationAdmin(event)
   const id = getRouterParam(event, 'id')
-  if (!id) {
-    throw createError({ statusCode: 400, statusMessage: 'ID guru diperlukan' })
-  }
+  if (!id) throw createError({ statusCode: 400, statusMessage: 'ID guru diperlukan' })
 
-  const body = await readBody(event)
-  const parsed = updateTeacherSchema.safeParse(body)
-
-  if (!parsed.success) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: parsed.error.issues[0]?.message ?? 'Data tidak valid',
-    })
-  }
-
+  const parsed = updateTeacherSchema.safeParse(await readBody(event))
+  if (!parsed.success) throw createError({ statusCode: 400, statusMessage: parsed.error.issues[0]?.message ?? 'Data tidak valid' })
   const data = parsed.data
 
-  // Cek guru exists
   const teacher = await db.query.teachers.findFirst({
-    where: eq(teachers.id, id),
+    where: and(eq(teachers.id, id), eq(teachers.organizationId, organization.id)),
     columns: { id: true, userId: true },
   })
-  if (!teacher) {
-    throw createError({ statusCode: 404, statusMessage: 'Guru tidak ditemukan' })
-  }
+  if (!teacher) throw createError({ statusCode: 404, statusMessage: 'Guru tidak ditemukan' })
 
-  // Cek NIP duplikat (kecuali dirinya sendiri)
   const dupNip = await db.query.teachers.findFirst({
-    where: and(eq(teachers.nip, data.nip), ne(teachers.id, id)),
+    where: and(eq(teachers.organizationId, organization.id), eq(teachers.nip, data.nip), ne(teachers.id, id)),
     columns: { id: true },
   })
-  if (dupNip) {
-    throw createError({
-      statusCode: 409,
-      statusMessage: `NIP ${data.nip} sudah digunakan guru lain`,
+  if (dupNip) throw createError({ statusCode: 409, statusMessage: `NIP ${data.nip} sudah digunakan guru lain` })
+
+  if (data.code) {
+    const dupCode = await db.query.teachers.findFirst({
+      where: and(eq(teachers.organizationId, organization.id), eq(teachers.code, data.code), ne(teachers.id, id)),
+      columns: { id: true },
     })
+    if (dupCode) throw createError({ statusCode: 409, statusMessage: `Kode guru ${data.code} sudah digunakan` })
   }
 
-  // Cek kode duplikat (kecuali dirinya sendiri)
-  const dupCode = await db.query.teachers.findFirst({
-    where: and(eq(teachers.code, data.code), ne(teachers.id, id)),
-    columns: { id: true },
-  })
-  if (dupCode && data.code) {
-    throw createError({
-      statusCode: 409,
-      statusMessage: `Kode guru ${data.code} sudah digunakan`,
-    })
-  }
+  await db.update(users).set({ name: data.name }).where(eq(users.id, teacher.userId))
+  await db.update(teachers).set({
+    code: data.code || null,
+    nip: data.nip,
+    phone: data.phone || null,
+    address: data.address || null,
+    subject: data.subject || null,
+  }).where(and(eq(teachers.id, id), eq(teachers.organizationId, organization.id)))
 
-  // Update dalam transaksi
-  await db.transaction(async (tx) => {
-    await tx.update(users).set({ name: data.name }).where(eq(users.id, teacher.userId))
-    await tx
-      .update(teachers)
-      .set({
-        code: data.code || null,
-        nip: data.nip,
-        phone: data.phone || null,
-        address: data.address || null,
-        subject: data.subject || null,
-      })
-      .where(eq(teachers.id, id))
-  })
-
-  return {
-    success: true,
-    message: 'Data guru berhasil diupdate',
-  }
+  return { success: true, message: 'Data guru berhasil diupdate' }
 })

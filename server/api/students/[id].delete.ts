@@ -2,20 +2,20 @@
 // DELETE /api/students/:id — hapus siswa beserta akun usernya
 import { db } from "~~/server/utils/db";
 import { students, users } from "~~/server/database/schema";
-import { eq } from "drizzle-orm";
-import { requireAdmin } from "~~/server/utils/requireAdmin";
+import { eq, and } from "drizzle-orm";
+import { requireOrganizationAdmin } from "~~/server/utils/tenant";
 import { writeAuditLog } from "~~/server/utils/audit";
 
 export default defineEventHandler(async (event) => {
-  const admin = await requireAdmin(event);
+  const { organization, user: admin } = await requireOrganizationAdmin(event);
   const id = getRouterParam(event, "id");
   if (!id) {
     throw createError({ statusCode: 400, statusMessage: "ID siswa diperlukan" });
   }
 
-  // Cari siswa
+  // Cari siswa (tenant-scoped)
   const student = await db.query.students.findFirst({
-    where: eq(students.id, id),
+    where: and(eq(students.id, id), eq(students.organizationId, organization.id)),
     columns: { id: true, userId: true },
   });
 

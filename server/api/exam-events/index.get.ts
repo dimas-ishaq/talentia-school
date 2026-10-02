@@ -2,14 +2,15 @@
 import { eq, desc, and } from 'drizzle-orm'
 import { examEvents } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  const { organization } = await requireOrganization(event)
   const q = getQuery(event)
   const status = q.status as string | undefined
   const type = q.type as string | undefined
 
-  const conditions = []
+  const conditions = [eq(examEvents.organizationId, organization.id)]
   if (status) conditions.push(eq(examEvents.status, status as any))
   if (type) conditions.push(eq(examEvents.type, type as any))
 

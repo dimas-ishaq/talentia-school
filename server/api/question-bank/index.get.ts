@@ -1,16 +1,20 @@
 import { and, asc, eq, like, or, inArray } from 'drizzle-orm'
-import { questionBank, questionOptions } from '~~/server/database/schema'
+import { questionBank, questionOptions, users } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  const { user, organization } = await requireOrganization(event)
+  // Tenant isolation via creator membership. Ponytail: tambah kolom organization_id
+  // ke question_bank ketika >10 sekolah atau butuh filter DB-level.
+  const orgUsers = await db.select({ id: users.id }).from(users).where(eq(users.organizationId, organization.id))
   const query = getQuery(event)
   const scope = typeof query.scope === 'string' && query.scope ? query.scope : undefined
   const courseId = typeof query.courseId === 'string' && query.courseId ? query.courseId : undefined
   const categoryId = typeof query.categoryId === 'string' && query.categoryId ? query.categoryId : undefined
   const search = typeof query.search === 'string' ? query.search.trim() : ''
 
-  const filters: any[] = [eq(questionBank.isActive, true)]
+  const filters: any[] = [eq(questionBank.isActive, true), inArray(questionBank.createdBy, orgUsers.map((row) => row.id))]
   if (scope) filters.push(eq(questionBank.scope, scope as 'global' | 'category' | 'course' | 'quiz'))
   if (courseId) filters.push(eq(questionBank.courseId, courseId))
   if (categoryId) filters.push(eq(questionBank.categoryId, categoryId))

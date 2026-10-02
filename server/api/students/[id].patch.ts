@@ -6,7 +6,7 @@ import { db } from "~~/server/utils/db";
 import { students, users } from "~~/server/database/schema";
 import { eq, and, ne } from "drizzle-orm";
 import { z } from "zod";
-import { requireAdmin } from "~~/server/utils/requireAdmin";
+import { requireOrganizationAdmin } from "~~/server/utils/tenant";
 import { writeAuditLog } from "~~/server/utils/audit";
 
 const updateStudentSchema = z.object({
@@ -20,7 +20,7 @@ const updateStudentSchema = z.object({
 });
 
 export default defineEventHandler(async (event) => {
-  const admin = await requireAdmin(event);
+  const { organization, user: admin } = await requireOrganizationAdmin(event);
   const id = getRouterParam(event, "id");
   if (!id) {
     throw createError({ statusCode: 400, statusMessage: "ID siswa diperlukan" });
@@ -36,18 +36,18 @@ export default defineEventHandler(async (event) => {
   }
   const data = parsed.data;
 
-  // 1) Pastikan siswa ada
+  // 1) Pastikan siswa ada (tenant-scoped)
   const student = await db.query.students.findFirst({
-    where: eq(students.id, id),
+    where: and(eq(students.id, id), eq(students.organizationId, organization.id)),
     columns: { id: true, userId: true },
   });
   if (!student) {
     throw createError({ statusCode: 404, statusMessage: "Siswa tidak ditemukan" });
   }
 
-  // 2) Cek NIS duplikat (kecuali miliknya sendiri)
+  // 2) Cek NIS duplikat dalam organisasi yang sama (kecuali miliknya sendiri)
   const dupNis = await db.query.students.findFirst({
-    where: and(eq(students.nis, data.nis), ne(students.id, id)),
+    where: and(eq(students.nis, data.nis), ne(students.id, id), eq(students.organizationId, organization.id)),
     columns: { id: true },
   });
   if (dupNis) {

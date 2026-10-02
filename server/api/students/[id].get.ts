@@ -3,11 +3,11 @@
 // Sebelumnya file ini TIDAK ADA, sehingga tombol "Edit" selalu 404.
 import { db } from "~~/server/utils/db";
 import { students, users } from "~~/server/database/schema";
-import { eq } from "drizzle-orm";
-import { requireAdmin } from "~~/server/utils/requireAdmin";
+import { eq, and } from "drizzle-orm";
+import { requireOrganizationAdmin } from "~~/server/utils/tenant";
 
 export default defineEventHandler(async (event) => {
-  await requireAdmin(event);
+  const { organization } = await requireOrganizationAdmin(event);
   const id = getRouterParam(event, "id");
   if (!id) {
     throw createError({ statusCode: 400, statusMessage: "ID siswa diperlukan" });
@@ -27,7 +27,7 @@ export default defineEventHandler(async (event) => {
     })
     .from(students)
     .leftJoin(users, eq(students.userId, users.id))
-    .where(eq(students.id, id))
+    .where(and(eq(students.id, id), eq(students.organizationId, organization.id)))
     .limit(1);
 
   const row = rows[0];

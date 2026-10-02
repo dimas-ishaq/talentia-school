@@ -1,14 +1,16 @@
 import { and, asc, eq, inArray, isNotNull } from 'drizzle-orm'
 import { courses, sections, activities, students, courseTeachers, courseClasses, teachers, users, classes, activityProgress } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
+import { requireOrganization } from '~~/server/utils/tenant'
 import { findCourseOrThrow, isCourseManager } from '~~/server/utils/courseAccess'
 import { canStudentSeeScore } from '~~/server/utils/quiz'
 import { isCategoryVisible } from '~~/server/utils/categoryVisibility'
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  const { user, organization } = await requireOrganization(event)
   const id = getRouterParam(event, 'id')!
-  const courseForAccess = await findCourseOrThrow(id)
+  // Tenant-scoped: course milik sekolah lain harus 404 (bukan 403), jangan bocorkan keberadaan data.
+  const courseForAccess = await findCourseOrThrow(id, organization.id)
   if (user.role === 'student') {
     if (!courseForAccess.isActive || !(await isCategoryVisible(courseForAccess.categoryId))) {
       throw createError({ statusCode: 404, statusMessage: 'Course tidak ditemukan' })
@@ -33,7 +35,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const [courseRow] = await db.select().from(courses).where(eq(courses.id, id)).limit(1)
+  const [courseRow] = await db.select().from(courses).where(and(eq(courses.id, id), eq(courses.organizationId, organization.id))).limit(1)
   if (!courseRow) throw createError({ statusCode: 404, statusMessage: 'Course tidak ditemukan' })
 
   const [teachersList, classesList, sectionsRows, studentSummary] = await Promise.all([

@@ -1,6 +1,6 @@
 // server/database/schema.ts
 import { relations } from 'drizzle-orm';
-import { sqliteTable, text, integer, real, uniqueIndex, index, foreignKey } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, uniqueIndex, index, foreignKey, primaryKey } from 'drizzle-orm/sqlite-core';
 
 export const organizations = sqliteTable('organizations', {
   id: text('id').primaryKey(),
@@ -77,7 +77,10 @@ export const teachers = sqliteTable('teachers', {
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
     .$defaultFn(() => new Date()),
-})
+}, (table) => ({
+  codeIdx: uniqueIndex('teachers_org_code_idx').on(table.organizationId, table.code),
+  nipIdx: uniqueIndex('teachers_org_nip_idx').on(table.organizationId, table.nip),
+}))
 
 // ==========================================
 // PARENTS — data khusus orang tua
@@ -108,7 +111,7 @@ export const students = sqliteTable('students', {
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' })
     .unique(),
-  nis: text('nis').unique(),              // Diisi saat profil siswa dilengkapi
+  nis: text('nis'),              // Diisi saat profil siswa dilengkapi
   classId: text('class_id').references(() => classes.id),
   parentId: text('parent_id').references(() => parents.id),
   gender: text('gender', { enum: ['L', 'P'] }),
@@ -120,7 +123,7 @@ export const students = sqliteTable('students', {
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
     .$defaultFn(() => new Date()),
-})
+}, (table) => ({ orgNisIdx: uniqueIndex('students_org_nis_idx').on(table.organizationId, table.nis) }))
 
 export const classes = sqliteTable('classes', {
   id: text('id').primaryKey(),
@@ -142,15 +145,18 @@ export const classes = sqliteTable('classes', {
 export const subjects = sqliteTable('subjects', {
   id: text('id').primaryKey(),
   organizationId: text('organization_id').references(() => organizations.id, { onDelete: 'cascade' }),
-  code: text('code').notNull().unique(), // "MTK", "IPA", "BHS-IND"
-  name: text('name').notNull().unique(), // "Matematika"
+  code: text('code').notNull(), // "MTK", "IPA", "BHS-IND"
+  name: text('name').notNull(), // "Matematika"
   description: text('description'),
   // false = mapel disembunyikan dari filter "Aktif"
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
     .$defaultFn(() => new Date()),
-})
+}, (table) => ({
+  codeIdx: uniqueIndex('subjects_org_code_idx').on(table.organizationId, table.code),
+  nameIdx: uniqueIndex('subjects_org_name_idx').on(table.organizationId, table.name),
+}))
 
 // ==========================================
 // ANNOUNCEMENTS — pengumuman sekolah
@@ -296,15 +302,20 @@ export const scheduleEntries = sqliteTable('schedule_entries', {
 
 // ==========================================
 // SETTINGS — konfigurasi global sekolah berbasis key-value
-// ==========================================
+// Ponytail: periode pilot = composite unique (organization_id, key).
+// PostgreSQL migration perlu backfill data lama tanpa organization_id
+// sebelum menambahkan unique constraint; cek drizzle-postgresql/* sebelum deploy.
 export const settings = sqliteTable('settings', {
-  key: text('key').primaryKey(),
+  key: text('key').notNull(),
   organizationId: text('organization_id').references(() => organizations.id, { onDelete: 'cascade' }),
   value: text('value').notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' })
     .notNull()
     .$defaultFn(() => new Date()),
-})
+}, (table) => ({
+  pk: primaryKey({ columns: [table.organizationId, table.key] }),
+  orgKeyIdx: uniqueIndex('settings_org_key_idx').on(table.organizationId, table.key),
+}))
 
 // ==========================================
 // RELATIONS — biar bisa query dengan `with`
@@ -427,13 +438,14 @@ export type NewScheduleEntry = typeof scheduleEntries.$inferInsert
 export const categories = sqliteTable('categories', {
   id: text('id').primaryKey(),
   organizationId: text('organization_id').references(() => organizations.id, { onDelete: 'cascade' }),
-  name: text('name').notNull().unique(),
+  name: text('name').notNull(),
   parentId: text('parent_id'),
   position: integer('position').notNull().default(0),
   isVisible: integer('is_visible', { mode: 'boolean' }).notNull().default(true),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 }, (table) => ({
   parentFk: foreignKey({ columns: [table.parentId], foreignColumns: [table.id] }).onDelete('set null'),
+  nameIdx: uniqueIndex('categories_org_name_idx').on(table.organizationId, table.name),
 }))
 
 // ==========================================
@@ -442,7 +454,7 @@ export const categories = sqliteTable('categories', {
 export const courses = sqliteTable('courses', {
   id: text('id').primaryKey(),
   organizationId: text('organization_id').references(() => organizations.id, { onDelete: 'cascade' }),
-  name: text('name').notNull().unique(),
+  name: text('name').notNull(),
   code: text('code'),
   description: text('description'),
   coverUrl: text('cover_url'),
@@ -454,7 +466,7 @@ export const courses = sqliteTable('courses', {
   position: integer('position').notNull().default(0),
   createdBy: text('created_by').notNull().references(() => users.id, { onDelete: 'restrict' }),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
-})
+}, (table) => ({ nameIdx: uniqueIndex('courses_org_name_idx').on(table.organizationId, table.name) }))
 
 // Guru pengampu
 export const courseTeachers = sqliteTable('course_teachers', {

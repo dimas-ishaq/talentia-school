@@ -1,6 +1,6 @@
 // server/database/schema.ts
 import { relations } from 'drizzle-orm';
-import { pgTable, text, integer, real, boolean, timestamp, uniqueIndex, index, foreignKey } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, real, boolean, timestamp, uniqueIndex, index, foreignKey, primaryKey } from 'drizzle-orm/pg-core';
 
 export const organizations = pgTable('organizations', {
   id: text('id').primaryKey(),
@@ -65,8 +65,8 @@ export const teachers = pgTable('teachers', {
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' })
     .unique(),
-  code: text('code').unique(),          // Kode guru (G001, TCH2024, dll)
-  nip: text('nip').unique(),            // Nomor Induk Pegawai
+  code: text('code'),          // Kode guru (G001, TCH2024, dll)
+  nip: text('nip'),            // Nomor Induk Pegawai
   phone: text('phone'),
   address: text('address'),
   subject: text('subject'),              // mapel yang diampu
@@ -75,7 +75,10 @@ export const teachers = pgTable('teachers', {
   createdAt: timestamp('created_at')
     .notNull()
     .$defaultFn(() => new Date()),
-})
+}, (table) => ({
+  codeIdx: uniqueIndex('teachers_org_code_idx').on(table.organizationId, table.code),
+  nipIdx: uniqueIndex('teachers_org_nip_idx').on(table.organizationId, table.nip),
+}))
 
 // ==========================================
 // PARENTS — data khusus orang tua
@@ -106,7 +109,7 @@ export const students = pgTable('students', {
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' })
     .unique(),
-  nis: text('nis').unique(),              // Diisi saat profil siswa dilengkapi
+  nis: text('nis'),              // Diisi saat profil siswa dilengkapi
   classId: text('class_id').references(() => classes.id),
   parentId: text('parent_id').references(() => parents.id),
   gender: text('gender', { enum: ['L', 'P'] }),
@@ -118,7 +121,7 @@ export const students = pgTable('students', {
   createdAt: timestamp('created_at')
     .notNull()
     .$defaultFn(() => new Date()),
-})
+}, (table) => ({ orgNisIdx: uniqueIndex('students_org_nis_idx').on(table.organizationId, table.nis) }))
 
 export const classes = pgTable('classes', {
   id: text('id').primaryKey(),
@@ -140,15 +143,18 @@ export const classes = pgTable('classes', {
 export const subjects = pgTable('subjects', {
   id: text('id').primaryKey(),
   organizationId: text('organization_id').references(() => organizations.id, { onDelete: 'cascade' }),
-  code: text('code').notNull().unique(), // "MTK", "IPA", "BHS-IND"
-  name: text('name').notNull().unique(), // "Matematika"
+  code: text('code').notNull(), // "MTK", "IPA", "BHS-IND"
+  name: text('name').notNull(), // "Matematika"
   description: text('description'),
   // false = mapel disembunyikan dari filter "Aktif"
   isActive: boolean('is_active').notNull().default(true),
   createdAt: timestamp('created_at')
     .notNull()
     .$defaultFn(() => new Date()),
-})
+}, (table) => ({
+  codeIdx: uniqueIndex('subjects_org_code_idx').on(table.organizationId, table.code),
+  nameIdx: uniqueIndex('subjects_org_name_idx').on(table.organizationId, table.name),
+}))
 
 // ==========================================
 // ANNOUNCEMENTS — pengumuman sekolah
@@ -294,15 +300,18 @@ export const scheduleEntries = pgTable('schedule_entries', {
 
 // ==========================================
 // SETTINGS — konfigurasi global sekolah berbasis key-value
-// ==========================================
+// Ponytail: periode pilot = composite unique (organization_id, key).
 export const settings = pgTable('settings', {
-  key: text('key').primaryKey(),
+  key: text('key').notNull(),
   organizationId: text('organization_id').references(() => organizations.id, { onDelete: 'cascade' }),
   value: text('value').notNull(),
   updatedAt: timestamp('created_at')
     .notNull()
     .$defaultFn(() => new Date()),
-})
+}, (table) => ({
+  pk: primaryKey({ columns: [table.organizationId, table.key] }),
+  orgKeyIdx: uniqueIndex('settings_org_key_idx').on(table.organizationId, table.key),
+}))
 
 // ==========================================
 // RELATIONS — biar bisa query dengan `with`
@@ -425,13 +434,14 @@ export type NewScheduleEntry = typeof scheduleEntries.$inferInsert
 export const categories = pgTable('categories', {
   id: text('id').primaryKey(),
   organizationId: text('organization_id').references(() => organizations.id, { onDelete: 'cascade' }),
-  name: text('name').notNull().unique(),
+  name: text('name').notNull(),
   parentId: text('parent_id'),
   position: integer('position').notNull().default(0),
   isVisible: boolean('is_active').notNull().default(true),
   createdAt: timestamp('created_at').notNull().$defaultFn(() => new Date()),
 }, (table) => ({
   parentFk: foreignKey({ columns: [table.parentId], foreignColumns: [table.id] }).onDelete('set null'),
+  nameIdx: uniqueIndex('categories_org_name_idx').on(table.organizationId, table.name),
 }))
 
 // ==========================================
@@ -440,7 +450,7 @@ export const categories = pgTable('categories', {
 export const courses = pgTable('courses', {
   id: text('id').primaryKey(),
   organizationId: text('organization_id').references(() => organizations.id, { onDelete: 'cascade' }),
-  name: text('name').notNull().unique(),
+  name: text('name').notNull(),
   code: text('code'),
   description: text('description'),
   coverUrl: text('cover_url'),
@@ -452,7 +462,7 @@ export const courses = pgTable('courses', {
   position: integer('position').notNull().default(0),
   createdBy: text('created_by').notNull().references(() => users.id, { onDelete: 'restrict' }),
   createdAt: timestamp('created_at').notNull().$defaultFn(() => new Date()),
-})
+}, (table) => ({ nameIdx: uniqueIndex('courses_org_name_idx').on(table.organizationId, table.name) }))
 
 // Guru pengampu
 export const courseTeachers = pgTable('course_teachers', {

@@ -30,7 +30,7 @@ export default defineEventHandler(async (event) => {
     })
     if (!link) throw createError({ statusCode: 403, statusMessage: 'Anda tidak terdaftar di course ini' })
   } else if (user.role === 'teacher') {
-    if (!(await isCourseManager(user.id, id))) {
+    if (!(await isCourseManager(user.id, id, organization.id))) {
       throw createError({ statusCode: 403, statusMessage: 'Anda tidak mengampu course ini' })
     }
   }

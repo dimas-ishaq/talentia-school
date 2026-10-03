@@ -1,7 +1,7 @@
 // POST /api/exam-events/[id]/sesi/[sesiId]/unlock — unlock attempt oleh proktor/admin (tanpa token)
 import { z } from 'zod'
 import { eq, and } from 'drizzle-orm'
-import { quizAttempts, quizEvents } from '~~/server/database/schema'
+import { examSessions, quizAttempts, quizEvents } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
 import { requireExamManager } from '~~/server/utils/exam'
 
@@ -15,7 +15,14 @@ export default defineEventHandler(async (event) => {
   if (!['admin', 'teacher'].includes(user.role)) throw createError({ statusCode: 403, statusMessage: 'Admin/guru saja' })
 
   const body = schema.parse(await readBody(event))
-  const attempt = await db.query.quizAttempts.findFirst({ where: eq(quizAttempts.id, body.attemptId) })
+  const session = await db.query.examSessions.findFirst({
+    where: and(eq(examSessions.id, sesiId), eq(examSessions.eventId, eventId)),
+    columns: { id: true },
+  })
+  if (!session) throw createError({ statusCode: 404, statusMessage: 'Sesi tidak ditemukan' })
+  const attempt = await db.query.quizAttempts.findFirst({
+    where: and(eq(quizAttempts.id, body.attemptId), eq(quizAttempts.sessionId, session.id)),
+  })
   if (!attempt) throw createError({ statusCode: 404, statusMessage: 'Percobaan tidak ditemukan' })
   if (attempt.lockStatus !== 'locked') throw createError({ statusCode: 400, statusMessage: 'Percobaan tidak dalam kondisi terkunci' })
 

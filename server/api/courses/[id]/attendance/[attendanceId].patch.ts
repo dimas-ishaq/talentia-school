@@ -11,7 +11,7 @@ export default defineEventHandler(async (event) => {
   const { user, organization } = await requireOrganization(event)
   const courseId = getRouterParam(event, 'id')!
   const attendanceId = getRouterParam(event, 'attendanceId')!
-  if (!['admin', 'org_admin', 'owner'].includes(user.role) && !(user.role === 'teacher' && await isCourseManager(user.id, courseId))) throw createError({ statusCode: 403, statusMessage: 'Anda tidak dapat memperbarui logbook ini' })
+  if (!['admin', 'org_admin', 'owner'].includes(user.role) && !(user.role === 'teacher' && await isCourseManager(user.id, courseId, organization.id))) throw createError({ statusCode: 403, statusMessage: 'Anda tidak dapat memperbarui logbook ini' })
   const course = await db.query.courses.findFirst({ where: and(eq(courses.id, courseId), eq(courses.organizationId, organization.id)), columns: { id: true } })
   if (!course) throw createError({ statusCode: 404, statusMessage: 'Course tidak ditemukan' })
   const body = schema.parse(await readBody(event))

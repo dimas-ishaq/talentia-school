@@ -58,7 +58,7 @@ export async function requireExamManager(event: any, eventId: string) {
   if (user.role === 'admin') return exam
   if (user.role !== 'teacher') throw createError({ statusCode: 403, statusMessage: 'Akses ditolak' })
 
-  const teacher = await db.query.teachers.findFirst({ where: eq(teachers.userId, user.id), columns: { id: true } })
+  const teacher = await db.query.teachers.findFirst({ where: and(eq(teachers.userId, user.id), eq(teachers.organizationId, organization.id)), columns: { id: true } })
   if (!teacher) throw createError({ statusCode: 403, statusMessage: 'Data guru tidak ditemukan' })
   const subjects = await db.query.examEventSubjects.findMany({ where: eq(examEventSubjects.eventId, eventId) })
   for (const subject of subjects) {
@@ -71,10 +71,16 @@ export async function requireExamManager(event: any, eventId: string) {
 }
 
 /** Hanya admin boleh membuat/mengubah blok sesi. */
-export async function requireExamSesiManager(event: any, sesiId: string) {
-  const { user } = await requireOrganization(event)
-  const sesi = await db.query.examSesi.findFirst({ where: eq(examSesi.id, sesiId) })
-  if (!sesi) throw createError({ statusCode: 404, statusMessage: 'Sesi tidak ditemukan' })
+export async function requireExamSesiManager(event: any, eventId: string, sesiId: string) {
+  const { user, organization } = await requireOrganization(event)
+  const sesi = await db.query.examSesi.findFirst({
+    where: and(eq(examSesi.id, sesiId), eq(examSesi.eventId, eventId)),
+  })
+  const exam = await db.query.examEvents.findFirst({
+    where: and(eq(examEvents.id, eventId), eq(examEvents.organizationId, organization.id)),
+    columns: { id: true },
+  })
+  if (!sesi || !exam) throw createError({ statusCode: 404, statusMessage: 'Sesi tidak ditemukan' })
   if (user.role !== 'admin') throw createError({ statusCode: 403, statusMessage: 'Hanya admin yang mengelola sesi' })
   return sesi
 }

@@ -26,6 +26,8 @@ export default defineEventHandler(async (event) => {
   if (!target) throw createError({ statusCode: 404, statusMessage: 'Pengguna tidak ditemukan' })
 
   const body = bodySchema.parse(await readBody(event))
+  if (body.role === 'owner' && admin.role !== 'owner') throw createError({ statusCode: 403, statusMessage: 'Hanya owner yang dapat memberikan role owner' })
+  if (target.role === 'owner' && admin.role !== 'owner') throw createError({ statusCode: 403, statusMessage: 'Role owner hanya dapat dikelola owner' })
 
   const updateData: Record<string, unknown> = {}
   if (body.name !== undefined) updateData.name = body.name.trim()

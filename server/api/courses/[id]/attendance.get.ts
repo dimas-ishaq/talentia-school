@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
     const student = await db.query.students.findFirst({ where: eq(students.userId, user.id), columns: { id: true } })
     if (!student) throw createError({ statusCode: 403, statusMessage: 'Profil siswa tidak ditemukan' })
     scopedStudentId = student.id
-  } else if (user.role === 'teacher' && !(await isCourseManager(user.id, courseId))) {
+  } else if (user.role === 'teacher' && !(await isCourseManager(user.id, courseId, organization.id))) {
     throw createError({ statusCode: 403, statusMessage: 'Anda tidak mengampu course ini' })
   } else if (!['admin', 'org_admin', 'owner', 'teacher'].includes(user.role)) {
     throw createError({ statusCode: 403, statusMessage: 'Role tidak didukung' })
@@ -53,5 +53,5 @@ export default defineEventHandler(async (event) => {
   const summary: Record<string, number> = { present: 0, late: 0, excused: 0, sick: 0, absent: 0, total: rows.length }
   for (const row of rows) if (row.status in summary) summary[row.status]! += 1
 
-  return { data: rows, summary, canManage: ['admin', 'org_admin', 'owner'].includes(user.role) || (user.role === 'teacher' && (await isCourseManager(user.id, courseId))) }
+  return { data: rows, summary, canManage: ['admin', 'org_admin', 'owner'].includes(user.role) || (user.role === 'teacher' && (await isCourseManager(user.id, courseId, organization.id))) }
 })

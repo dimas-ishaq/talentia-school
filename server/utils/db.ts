@@ -54,8 +54,11 @@ if (!isPostgres) {
     sqlite.exec(`CREATE TABLE organization_invites (token_hash text PRIMARY KEY NOT NULL, organization_id text NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, email text NOT NULL, role text NOT NULL, expires_at integer NOT NULL, accepted_at integer, created_at integer NOT NULL)`)
   }
   const defaultOrganization = sqlite.prepare('SELECT id FROM organizations ORDER BY created_at LIMIT 1').get() as { id: string } | undefined
+  if (!defaultOrganization && process.env.NODE_ENV === 'production') {
+    throw new Error('No organization configured; provision the first tenant explicitly before starting production')
+  }
   const defaultOrganizationId = defaultOrganization?.id || crypto.randomUUID()
-  if (!defaultOrganization) sqlite.prepare("INSERT INTO organizations (id, name, slug, status, created_at) VALUES (?, ?, ?, 'trial', ?)").run(defaultOrganizationId, 'Sekolah Utama', `sekolah-utama-${defaultOrganizationId.slice(0, 8)}`, Date.now())
+  if (!defaultOrganization) sqlite.prepare("INSERT INTO organizations (id, name, slug, status, created_at) VALUES (?, ?, ?, 'trial', ?)\n").run(defaultOrganizationId, 'Sekolah Utama', `sekolah-utama-${defaultOrganizationId.slice(0, 8)}`, Date.now())
   sqlite.prepare('UPDATE users SET organization_id = ? WHERE organization_id IS NULL').run(defaultOrganizationId)
   for (const table of ['teachers', 'parents', 'students', 'classes', 'subjects', 'announcements', 'attendance', 'calendar_events', 'schedule_entries', 'categories', 'courses', 'exam_events', 'settings']) {
     if (hasTable(table) && hasColumn(table, 'organization_id')) sqlite.prepare(`UPDATE "${table}" SET organization_id = ? WHERE organization_id IS NULL`).run(defaultOrganizationId)

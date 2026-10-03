@@ -11,7 +11,7 @@ export default defineEventHandler(async (event) => {
   const activityId = getRouterParam(event, 'activityId')!
   const body = schema.parse(await readBody(event))
   await findCourseOrThrow(courseId, organization.id)
-  if (!['admin', 'org_admin', 'owner'].includes(user.role) && !await isCourseManager(user.id, courseId)) throw createError({ statusCode: 403, statusMessage: 'Hanya guru/admin' })
+  if (!['admin', 'org_admin', 'owner'].includes(user.role) && !await isCourseManager(user.id, courseId, organization.id)) throw createError({ statusCode: 403, statusMessage: 'Hanya guru/admin' })
   const activity = await db.query.activities.findFirst({ where: eq(activities.id, activityId) })
   const section = activity && await db.query.sections.findFirst({ where: eq(sections.id, activity.sectionId) })
   if (!activity || activity.type !== 'forum' || !section || section.courseId !== courseId) throw createError({ statusCode: 404, statusMessage: 'Forum tidak ditemukan' })

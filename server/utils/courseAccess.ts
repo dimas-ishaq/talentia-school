@@ -13,9 +13,9 @@ export async function findCourseOrThrow(courseId: string, organizationId?: strin
   return course
 }
 
-export async function isCourseManager(userId: string, courseId: string) {
+export async function isCourseManager(userId: string, courseId: string, organizationId: string) {
   const teacher = await db.query.teachers.findFirst({
-    where: eq(teachers.userId, userId),
+    where: and(eq(teachers.userId, userId), eq(teachers.organizationId, organizationId)),
     columns: { id: true },
   })
   if (!teacher) return false
@@ -32,6 +32,6 @@ export async function requireCourseManager(event: any, courseId: string) {
   const { user, organization } = await requireOrganization(event)
   const course = await findCourseOrThrow(courseId, organization.id)
   if (user.role === 'admin' || user.role === 'org_admin' || user.role === 'owner') return course
-  if (user.role === 'teacher' && (await isCourseManager(user.id, courseId))) return course
+  if (user.role === 'teacher' && (await isCourseManager(user.id, courseId, organization.id))) return course
   throw createError({ statusCode: 403, statusMessage: 'Anda tidak mengampu course ini' })
 }

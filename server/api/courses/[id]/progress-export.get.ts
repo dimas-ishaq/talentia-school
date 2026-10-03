@@ -3,6 +3,7 @@ import { activities, activityProgress, courseClasses, students, users, classes, 
 import { db } from '~~/server/utils/db'
 import { requireCourseManager } from '~~/server/utils/courseAccess'
 import { DEFAULT_TIMEZONE } from '~~/shared/timezone.ts'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 const c = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
 const SUBMIT_TYPES = ['assignment', 'quiz', 'forum']
@@ -10,6 +11,7 @@ const SUBMIT_TYPES = ['assignment', 'quiz', 'forum']
 export default defineEventHandler(async (event) => {
   const courseId = getRouterParam(event, 'id')!
   const course = await requireCourseManager(event, courseId)
+  const { organization } = await requireOrganization(event)
   const acts = await db.select({ id: activities.id, title: activities.title, type: activities.type, isRequired: activities.isRequired, sectionTitle: sections.title })
     .from(activities).innerJoin(sections, eq(activities.sectionId, sections.id))
     .where(eq(sections.courseId, courseId)).orderBy(asc(sections.position), asc(activities.position))
@@ -28,7 +30,7 @@ export default defineEventHandler(async (event) => {
     if (act.type === 'text') return p?.completedAt ? 'Selesai' : 'Belum'
     return p?.viewedAt ? 'Dilihat' : 'Belum'
   }
-  const [{ value: tzs } = { value: '' }] = (await db.select({ value: settings.value }).from(settings).where(eq(settings.key, 'school.timezone')).limit(1)) ?? []
+  const [{ value: tzs } = { value: '' }] = (await db.select({ value: settings.value }).from(settings).where(and(eq(settings.organizationId, organization.id), eq(settings.key, 'school.timezone'))).limit(1)) ?? []
   const exportedAt = new Intl.DateTimeFormat('id-ID', { timeZone: tzs || DEFAULT_TIMEZONE, dateStyle: 'medium', timeStyle: 'short', hour12: false }).format(new Date())
   const header = ['Nama', 'NIS', 'Kelas', ...acts.map(a => `${a.sectionTitle} \u2014 ${a.title}`), 'Wajib selesai', 'Wajib total', 'Progress wajib (%)']
   const out: unknown[][] = [['Course', course.name], ['Tanggal export', exportedAt], [], header]

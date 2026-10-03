@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
   await findCourseOrThrow(courseId, organization.id)
   const activity = await requireQuizActivity(event, courseId, quizId)
 
-  const isManager = user.role === 'admin' || (user.role === 'teacher' && (await isCourseManager(user.id, courseId)))
+  const isManager = user.role === 'admin' || (user.role === 'teacher' && (await isCourseManager(user.id, courseId, organization.id)))
   const where = isManager
     ? and(eq(quizAttempts.id, attemptId), eq(quizAttempts.activityId, quizId))
     : and(eq(quizAttempts.id, attemptId), eq(quizAttempts.activityId, quizId), eq(quizAttempts.studentId, (await requireEnrolledStudent(user.id, courseId)).id))

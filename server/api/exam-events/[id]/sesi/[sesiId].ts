@@ -15,7 +15,7 @@ const schema = z.object({
 
 export default defineEventHandler(async (event) => {
   const sesiId = String(getRouterParam(event, 'sesiId') ?? '')
-  await requireExamSesiManager(event, sesiId)
+  await requireExamSesiManager(event, String(getRouterParam(event, 'id') ?? ''), sesiId)
   const method = getMethod(event)
 
   const sesi = await db.query.examSesi.findFirst({ where: eq(examSesi.id, sesiId) })

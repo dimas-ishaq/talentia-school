@@ -14,8 +14,9 @@ const bodySchema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
-  const { organization } = await requireOrganizationAdmin(event)
+  const { membership, organization } = await requireOrganizationAdmin(event)
   const body = bodySchema.parse(await readBody(event))
+  if (body.role === 'org_admin' && membership.role !== 'owner') throw createError({ statusCode: 403, statusMessage: 'Hanya owner yang dapat menambah admin organisasi' })
   const email = body.email.trim().toLowerCase()
   const existing = await db.query.users.findFirst({ where: eq(users.email, email), columns: { id: true } })
   if (existing) throw createError({ statusCode: 409, statusMessage: 'Email sudah digunakan' })

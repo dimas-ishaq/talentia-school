@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
     const enrolled = student?.classId && await db.query.courseClasses.findFirst({ where: and(eq(courseClasses.courseId, courseId), eq(courseClasses.classId, student.classId)) })
     if (!student || !enrolled) throw createError({ statusCode: 403, statusMessage: 'Anda tidak terdaftar di course ini' })
     studentId = student.id
-  } else if (!(await isCourseManager(user.id, courseId))) throw createError({ statusCode: 403, statusMessage: 'Akses ditolak' })
+  } else if (!(await isCourseManager(user.id, courseId, organization.id))) throw createError({ statusCode: 403, statusMessage: 'Akses ditolak' })
   const discussion = await db.query.forumDiscussions.findFirst({ where: and(eq(forumDiscussions.id, body.discussionId), eq(forumDiscussions.activityId, activityId)) })
   if (!discussion) throw createError({ statusCode: 400, statusMessage: 'Diskusi tidak valid' })
   if (body.parentId) {

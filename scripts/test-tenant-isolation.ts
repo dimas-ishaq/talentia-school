@@ -149,6 +149,13 @@ async function main() {
   )
   insAtt.run('att_a', 'org_a', 'siswa_a', 'class_a', iso(today), 'present', 'u_a', 1)
   insAtt.run('att_b', 'org_b', 'siswa_b', 'class_b', iso(today), 'present', 'u_b', 2)
+  // Seed exam org B: section + activity + eventSubject + sesi + session + locked attempt
+  raw.prepare('INSERT INTO sections (id, course_id, title, position, is_visible, created_at) VALUES (?, ?, ?, ?, 1, ?)').run('sec_b', 'course_b', 'Soal Ujian', 0, 2)
+  raw.prepare("INSERT INTO activities (id, section_id, type, title, status, score_visibility, review_mode, position, is_required, is_visible, created_at) VALUES (?, ?, 'quiz', ?, 'draft', 'after_close', 'after_close', 0, 1, 1, ?)").run('act_b', 'sec_b', 'Ujian Matematika', 2)
+  raw.prepare('INSERT INTO exam_event_subjects (id, event_id, subject_id, exam_course_id, activity_id, duration_minutes, token_hash, created_by, created_at) VALUES (?, ?, ?, ?, ?, 90, ?, ?, ?)').run('esubj_b', 'ev_b', 'mapel_b', 'course_b', 'act_b', 'hash-x', 'u_b', 2)
+  raw.prepare("INSERT INTO exam_sesi (id, event_id, name, open_at, close_at, status, position, created_by, created_at) VALUES (?, ?, 'Sesi 1', ?, ?, 'draft', 0, ?, ?)").run('sesi_b', 'ev_b', '2026-10-01T07:00:00', '2026-10-01T09:00:00', 'u_b', 2)
+  raw.prepare("INSERT INTO exam_sessions (id, event_id, event_subject_id, sesi_id, class_id, open_at, close_at, duration_minutes, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 90, 'draft', ?)").run('esess_b', 'ev_b', 'esubj_b', 'sesi_b', 'class_b', '2026-10-01T07:00:00', '2026-10-01T09:00:00', 2)
+  raw.prepare("INSERT INTO quiz_attempts (id, activity_id, student_id, attempt_number, started_at, status, session_id, lock_status, violation_count, created_at) VALUES (?, 'act_b', 'siswa_b', 1, ?, 'in_progress', 'esess_b', 'locked', 3, ?)").run('11111111-1111-4111-8111-111111111111', Date.now(), 2)
   raw.close()
 
   log('→ boot app')
@@ -241,6 +248,37 @@ async function main() {
     await check('GET /api/exam-events/ev_a sebagai admin A → 200', async () => {
       const res = await api(cookieA, '/api/exam-events/ev_a')
       assert.equal(res.status, 200, `harusnya 200, dapat ${res.status}`)
+    })
+    await check('GET proctor-token event B sebagai admin A → 404', async () => {
+      const res = await api(cookieA, '/api/exam-events/ev_b/sesi/sesi_b/proctor-token')
+      assert.equal(res.status, 404, `cross-tenant token harus 404, dapat ${res.status}`)
+    })
+    await check('POST unlock attempt event B sebagai admin A → 404', async () => {
+      const res = await fetch(`${BASE}/api/exam-events/ev_b/sesi/sesi_b/unlock`, {
+        method: 'POST', headers: { 'content-type': 'application/json', cookie: cookieA },
+        body: JSON.stringify({ attemptId: '11111111-1111-4111-8111-111111111111' }),
+      })
+      assert.equal(res.status, 404, `cross-tenant unlock harus 404, dapat ${res.status} ${await res.text()}`)
+    })
+    await check('POST sesi event B sebagai admin A → 404', async () => {
+      const res = await fetch(`${BASE}/api/exam-events/ev_b/sesi`, {
+        method: 'POST', headers: { 'content-type': 'application/json', cookie: cookieA },
+        body: JSON.stringify({ name: 'Sesi X', openAt: '2026-10-01T07:00:00', closeAt: '2026-10-01T09:00:00' }),
+      })
+      assert.equal(res.status, 404, `cross-tenant sesi harus 404, dapat ${res.status} ${await res.text()}`)
+    })
+    await check('POST classes event B sebagai admin A → 404', async () => {
+      const res = await fetch(`${BASE}/api/exam-events/ev_b/classes`, {
+        method: 'POST', headers: { 'content-type': 'application/json', cookie: cookieA },
+        body: JSON.stringify({ classIds: ['class_a'] }),
+      })
+      assert.equal(res.status, 404, `cross-tenant event harus 404, dapat ${res.status} ${await res.text()}`)
+    })
+    await check('POST publish event B sebagai admin A → 404', async () => {
+      const res = await fetch(`${BASE}/api/exam-events/ev_b/publish`, {
+        method: 'POST', headers: { cookie: cookieA },
+      })
+      assert.equal(res.status, 404, `cross-tenant publish harus 404, dapat ${res.status} ${await res.text()}`)
     })
     await check('GET /api/calendar hanya memuat agenda/kalender org sendiri', async () => {
       const res = await api(cookieA, '/api/calendar')

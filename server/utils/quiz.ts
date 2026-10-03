@@ -28,8 +28,8 @@ export async function assertQuizEditable(activityId: string) {
   }
 }
 
-export async function requireEnrolledStudent(userId: string, courseId: string) {
-  const course = await findCourseOrThrow(courseId)
+export async function requireEnrolledStudent(userId: string, courseId: string, organizationId?: string) {
+  const course = await findCourseOrThrow(courseId, organizationId)
   if (!course.organizationId) throw createError({ statusCode: 503, statusMessage: 'Course tanpa organisasi' })
   const student = await db.query.students.findFirst({ where: and(eq(students.userId, userId), eq(students.organizationId, course.organizationId)) })
   if (!student?.classId || !student.organizationId) throw createError({ statusCode: 403, statusMessage: 'Data siswa tidak ditemukan' })

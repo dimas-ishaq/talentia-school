@@ -1,12 +1,12 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { examEvents, examEventSubjects, examEventClasses, examEventSubjectClasses, examSesi, examSessions, activities } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
-import { requireAdmin } from '~~/server/utils/requireAdmin'
+import { requireOrganizationAdmin } from '~~/server/utils/tenant'
 
 export default defineEventHandler(async (event) => {
-  await requireAdmin(event)
+  const { organization } = await requireOrganizationAdmin(event)
   const id = String(getRouterParam(event, 'id') ?? '')
-  const record = await db.query.examEvents.findFirst({ where: eq(examEvents.id, id) })
+  const record = await db.query.examEvents.findFirst({ where: and(eq(examEvents.id, id), eq(examEvents.organizationId, organization.id)) })
   if (!record) throw createError({ statusCode: 404, statusMessage: 'Event tidak ditemukan' })
   if (record.status !== 'draft') throw createError({ statusCode: 400, statusMessage: 'Event sudah dipublikasikan atau ditutup' })
 

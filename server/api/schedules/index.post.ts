@@ -46,6 +46,7 @@ export default defineEventHandler(async (event) => {
     endTime,
     teacherId,
     classId,
+    organizationId: organization.id,
   })
   if (conflict) throw createError({ statusCode: 409, statusMessage: conflict })
 

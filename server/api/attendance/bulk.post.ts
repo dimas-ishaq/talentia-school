@@ -1,8 +1,9 @@
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
-import { students, attendance } from '~~/server/database/schema'
+import { classes, students, attendance } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
 import { requireAttendanceAccess } from '~~/server/utils/attendanceAccess'
+import { requireOrganization } from '~~/server/utils/tenant'
 
 const schema = z.object({
   classId: z.string().min(1, 'Kelas wajib dipilih'),
@@ -15,12 +16,15 @@ const schema = z.object({
 export default defineEventHandler(async (event) => {
   const { classId, subjectId, date, status } = schema.parse(await readBody(event))
   const user = await requireAttendanceAccess(event, classId, subjectId)
+  const { organization } = await requireOrganization(event)
+  const kelas = await db.query.classes.findFirst({ where: and(eq(classes.id, classId), eq(classes.organizationId, organization.id)), columns: { id: true } })
+  if (!kelas) throw createError({ statusCode: 404, statusMessage: 'Kelas tidak ditemukan' })
 
-  const classStudents = await db.query.students.findMany({ where: eq(students.classId, classId), columns: { id: true } })
+  const classStudents = await db.query.students.findMany({ where: and(eq(students.classId, classId), eq(students.organizationId, organization.id)), columns: { id: true } })
   if (!classStudents.length) return { success: true, created: 0, updated: 0 }
 
   const existing = await db.query.attendance.findMany({
-    where: and(eq(attendance.date, date), eq(attendance.classId, classId), eq(attendance.subjectId, subjectId)),
+    where: and(eq(attendance.organizationId, organization.id), eq(attendance.date, date), eq(attendance.classId, classId), eq(attendance.subjectId, subjectId)),
     columns: { studentId: true },
   })
   const existingIds = new Set(existing.map((row) => row.studentId))
@@ -47,7 +51,7 @@ export default defineEventHandler(async (event) => {
   if (status) {
     await db.update(attendance)
       .set({ status, recordedBy: user.id })
-      .where(and(eq(attendance.date, date), eq(attendance.classId, classId), eq(attendance.subjectId, subjectId)))
+      .where(and(eq(attendance.organizationId, organization.id), eq(attendance.date, date), eq(attendance.classId, classId), eq(attendance.subjectId, subjectId)))
     updated = classStudents.length
   }
 

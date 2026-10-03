@@ -2,7 +2,7 @@
 // Otomatis buat sesi (mapel × kelas) untuk semua mapel yang sudah ada
 import { z } from 'zod'
 import { eq, and, inArray } from 'drizzle-orm'
-import { examEvents, examEventSubjects, examEventClasses, examSessions, examSesi } from '~~/server/database/schema'
+import { classes, examEvents, examEventSubjects, examEventClasses, examSessions, examSesi } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
 import { requireExamManager } from '~~/server/utils/exam'
 
@@ -10,10 +10,13 @@ const schema = z.object({ classIds: z.array(z.string().trim().min(1)).min(1) })
 
 export default defineEventHandler(async (event) => {
   const eventId = String(getRouterParam(event, 'id') ?? '')
-  await requireExamManager(event, eventId)
+  const ev = await requireExamManager(event, eventId)
   const body = schema.parse(await readBody(event))
-  const ev = await db.query.examEvents.findFirst({ where: eq(examEvents.id, eventId) })
-  if (!ev) throw createError({ statusCode: 404, statusMessage: 'Event tidak ditemukan' })
+
+  const owned = await db.query.classes.findMany({ where: and(inArray(classes.id, body.classIds), eq(classes.organizationId, ev.organizationId!)), columns: { id: true } })
+  const ownedIds = new Set(owned.map((c) => c.id))
+  const foreign = [...new Set(body.classIds)].filter((id) => !ownedIds.has(id))
+  if (foreign.length) throw createError({ statusCode: 400, statusMessage: 'Ada kelas yang bukan milik organisasi Anda' })
 
   const existing = await db.query.examEventClasses.findMany({ where: eq(examEventClasses.eventId, eventId) })
   const existingIds = new Set(existing.map((c) => c.classId))

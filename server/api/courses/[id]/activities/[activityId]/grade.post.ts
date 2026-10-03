@@ -33,7 +33,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: `Nilai melebihi maksimum (${maxScore})` })
   }
 
-  const student = await db.query.students.findFirst({ where: eq(students.id, body.studentId), columns: { id: true } })
+  const student = await db.query.students.findFirst({ where: and(eq(students.id, body.studentId), eq(students.organizationId, manager.organizationId!)), columns: { id: true } })
   if (!student) throw createError({ statusCode: 404, statusMessage: 'Siswa tidak ditemukan' })
 
   const existing = await db.query.activityProgress.findFirst({

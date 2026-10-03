@@ -32,6 +32,7 @@ export async function findScheduleConflict(params: {
   teacherId: string | null
   classId: string
   excludeId?: string
+  organizationId: string
 }): Promise<string | null> {
   const start = timeToMinutes(params.startTime)
   const end = timeToMinutes(params.endTime)
@@ -50,6 +51,7 @@ export async function findScheduleConflict(params: {
       and(
         eq(scheduleEntries.dayOfWeek, params.dayOfWeek),
         eq(scheduleEntries.isActive, true),
+        eq(scheduleEntries.organizationId, params.organizationId),
         params.excludeId ? ne(scheduleEntries.id, params.excludeId) : undefined,
       ),
     )

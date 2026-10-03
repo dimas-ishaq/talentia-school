@@ -1,10 +1,10 @@
 // server/api/schedules/[id].patch.ts
 // PATCH /api/schedules/:id — ubah 1 jadwal (admin-only).
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { db } from '~~/server/utils/db'
 import { scheduleEntries } from '~~/server/database/schema'
 import { z } from 'zod'
-import { requireAdmin } from '~~/server/utils/requireAdmin'
+import { requireOrganizationAdmin } from '~~/server/utils/tenant'
 import { findScheduleConflict, timeToMinutes } from '~~/server/utils/schedule'
 
 const schema = z.object({
@@ -20,11 +20,11 @@ const schema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
-  const user = await requireAdmin(event)
+  const { organization } = await requireOrganizationAdmin(event)
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, statusMessage: 'ID tidak valid' })
 
-  const existing = await db.query.scheduleEntries.findFirst({ where: eq(scheduleEntries.id, id) })
+  const existing = await db.query.scheduleEntries.findFirst({ where: and(eq(scheduleEntries.id, id), eq(scheduleEntries.organizationId, organization.id)) })
   if (!existing) throw createError({ statusCode: 404, statusMessage: 'Jadwal tidak ditemukan' })
 
   const body = await readBody(event)
@@ -57,6 +57,7 @@ export default defineEventHandler(async (event) => {
       teacherId: merged.teacherId,
       classId: merged.classId,
       excludeId: id,
+      organizationId: organization.id,
     })
     if (conflict) throw createError({ statusCode: 409, statusMessage: conflict })
   }

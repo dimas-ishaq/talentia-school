@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm'
+import { and, count, eq } from 'drizzle-orm'
 import { users } from '~~/server/database/schema'
 import { db } from '~~/server/utils/db'
 import { requireOrganizationAdmin } from '~~/server/utils/tenant'
@@ -12,11 +12,19 @@ export default defineEventHandler(async (event) => {
 
   const target = await db.query.users.findFirst({
     where: and(eq(users.id, id), eq(users.organizationId, organization.id)),
-    columns: { id: true },
+    columns: { id: true, role: true },
   })
   if (!target) throw createError({ statusCode: 404, statusMessage: 'Pengguna tidak ditemukan' })
 
-  await db.delete(users).where(eq(users.id, id))
+  if (target.role === 'owner') {
+    const [ownerCount] = await db
+      .select({ count: count() })
+      .from(users)
+      .where(and(eq(users.organizationId, organization.id), eq(users.role, 'owner')))
+    if (ownerCount.count <= 1) throw createError({ statusCode: 400, statusMessage: 'Tidak dapat menghapus owner terakhir' })
+  }
+
+  await db.delete(users).where(and(eq(users.id, id), eq(users.organizationId, organization.id)))
   await writeAuditLog({ userId: admin.id, action: 'user.delete', target: id })
   return { success: true }
 })

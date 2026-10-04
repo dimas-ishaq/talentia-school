@@ -85,6 +85,7 @@ async function main() {
   )
   insUser.run('u_a', 'org_a', 'admin.a@sekolah.test', 'Admin A', 'admin', password, 1)
   insUser.run('u_b', 'org_b', 'admin.b@sekolah.test', 'Admin B', 'admin', password, 1)
+  raw.prepare('INSERT INTO users (id, organization_id, platform_role, email, name, role, password, must_change_password, created_at) VALUES (?, NULL, ?, ?, ?, ?, ?, 0, ?)').run('u_op', 'platform_owner', 'operator@talentia.test', 'Operator', 'admin', password, 3)
   const insMember = raw.prepare(
     'INSERT INTO organization_members (organization_id, user_id, role, status) VALUES (?, ?, ?, ?)',
   )
@@ -201,6 +202,29 @@ async function main() {
     await waitForServer(server)
     const cookieA = await login('admin.a@sekolah.test', PASSWORD)
     const cookieB = await login('admin.b@sekolah.test', PASSWORD)
+    const cookieOperator = await login('operator@talentia.test', PASSWORD)
+
+    await check('GET platform organizations hanya untuk platform admin', async () => {
+      const own = await api(cookieOperator, '/api/platform/organizations')
+      assert.equal(own.status, 200, `operator harus 200, dapat ${own.status}`)
+      assert.equal((own.body?.data ?? []).length >= 2, true)
+      const denied = await api(cookieA, '/api/platform/organizations')
+      assert.equal(denied.status, 403, `admin tenant harus 403, dapat ${denied.status}`)
+    })
+    await check('PATCH status organisasi oleh operator + login suspended ditolak', async () => {
+      const changed = await fetch(`${BASE}/api/platform/organizations/org_b/status`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json', cookie: cookieOperator },
+        body: JSON.stringify({ status: 'suspended' }),
+      })
+      assert.equal(changed.status, 200, `ubah status harus 200, dapat ${changed.status} ${await changed.text()}`)
+      const blocked = await post('/api/auth/login', { email: 'admin.b@sekolah.test', password: PASSWORD })
+      assert.equal(blocked.status, 403, `login org suspended harus 403, dapat ${blocked.status}`)
+      const restored = await fetch(`${BASE}/api/platform/organizations/org_b/status`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json', cookie: cookieOperator },
+        body: JSON.stringify({ status: 'active' }),
+      })
+      assert.equal(restored.status, 200)
+    })
 
     await check('GET /api/students/siswa_b sebagai admin A → 404', async () => {
       const res = await api(cookieA, '/api/students/siswa_b')

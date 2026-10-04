@@ -18,6 +18,7 @@ export interface StudentDetail extends Student {
   birthDate: string | null
   phone: string | null
   address: string | null
+  parentId: string | null
 }
 
 export interface StudentListMeta {

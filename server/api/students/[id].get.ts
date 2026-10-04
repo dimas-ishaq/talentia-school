@@ -24,6 +24,7 @@ export default defineEventHandler(async (event) => {
       birthDate: students.birthDate,
       phone: students.phone,
       address: students.address,
+      parentId: students.parentId,
     })
     .from(students)
     .leftJoin(users, eq(students.userId, users.id))

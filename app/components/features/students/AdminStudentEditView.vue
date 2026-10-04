@@ -28,6 +28,31 @@ const initial = computed(() => {
   }
 })
 
+const parentId = computed(() => (data.value?.data?.parentId as string | null) ?? null)
+const parentSearch = ref('')
+const { data: parentsData, refresh: refreshParents } = await useFetch<{ data: { id: string; name: string }[] }>(() => `/api/users?role=parent&perPage=100&search=${encodeURIComponent(parentSearch.value)}`, { watch: [parentSearch] })
+const parents = computed(() => parentsData.value?.data ?? [])
+const parentForm = reactive({ parentId: '' as string })
+watch(parentId, (v) => { parentForm.parentId = v ?? '' }, { immediate: true })
+const parentSaving = ref(false)
+const parentMessage = ref('')
+const parentError = ref('')
+
+async function saveParent() {
+  parentError.value = ''
+  parentMessage.value = ''
+  parentSaving.value = true
+  try {
+    await $fetch(`/api/students/${id}/parent`, { method: 'PATCH', body: { parentId: parentForm.parentId || null } })
+    parentMessage.value = parentForm.parentId ? 'Orang tua terhubung.' : 'Tautan orang tua dilepas.'
+    await refresh()
+  } catch (e: unknown) {
+    parentError.value = pesanDariError(e, 'Gagal menyimpan tautan orang tua')
+  } finally {
+    parentSaving.value = false
+  }
+}
+
 const isSubmitting = ref(false)
 const errorMessage = ref('')
 
@@ -84,15 +109,30 @@ function handleCancel() {
       </div>
     </div>
 
-    <StudentForm
-      v-else
-      :initial="initial"
-      :show-account="false"
-      :is-submitting="isSubmitting"
-      :error-message="errorMessage"
-      submit-label="Simpan Perubahan"
-      @submit="handleSubmit"
-      @cancel="handleCancel"
-    />
+    <template v-else>
+      <StudentForm
+        :initial="initial"
+        :show-account="false"
+        :is-submitting="isSubmitting"
+        :error-message="errorMessage"
+        submit-label="Simpan Perubahan"
+        @submit="handleSubmit"
+        @cancel="handleCancel"
+      />
+      <section class="max-w-3xl rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-800">
+        <h2 class="font-semibold text-slate-800 dark:text-slate-100">Hubungkan orang tua</h2>
+        <p class="mt-1 text-sm text-slate-500">Pilih akun orang tua untuk menampilkan dashboard anak.</p>
+        <div class="mt-4 flex gap-2">
+          <input v-model="parentSearch" class="h-10 min-w-0 flex-1 rounded-lg border border-slate-200 px-3 text-sm dark:border-slate-600 dark:bg-slate-900" placeholder="Cari nama/email" />
+          <select v-model="parentForm.parentId" class="h-10 min-w-0 flex-1 rounded-lg border border-slate-200 px-3 text-sm dark:border-slate-600 dark:bg-slate-900">
+            <option value="">Tidak terhubung</option>
+            <option v-for="parent in parents" :key="parent.id" :value="parent.id">{{ parent.name }}</option>
+          </select>
+          <button class="rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white disabled:opacity-50" :disabled="parentSaving" @click="saveParent">Simpan</button>
+        </div>
+        <p v-if="parentMessage" class="mt-2 text-sm text-emerald-600">{{ parentMessage }}</p>
+        <p v-if="parentError" class="mt-2 text-sm text-red-600">{{ parentError }}</p>
+      </section>
+    </template>
   </div>
 </template>

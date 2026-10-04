@@ -92,6 +92,10 @@ async function main() {
   insMember.run('org_b', 'u_b', 'org_admin', 'active')
   insUser.run('u_siswa_a', 'org_a', 'siswa.a@sekolah.test', 'Siswa A', 'student', password, 1)
   insUser.run('u_siswa_b', 'org_b', 'siswa.b@sekolah.test', 'Siswa B', 'student', password, 1)
+  insUser.run('u_parent_a', 'org_a', 'wali.a@sekolah.test', 'Wali A', 'parent', password, 1)
+  insUser.run('u_parent_b', 'org_b', 'wali.b@sekolah.test', 'Wali B', 'parent', password, 1)
+  insMember.run('org_a', 'u_parent_a', 'parent', 'active')
+  insMember.run('org_b', 'u_parent_b', 'parent', 'active')
   insUser.run('u_teacher_a', 'org_a', 'guru.a@sekolah.test', 'Guru A', 'teacher', password, 1)
   insUser.run('u_teacher_b', 'org_b', 'guru.b@sekolah.test', 'Guru B', 'teacher', password, 1)
   const insTeacher = raw.prepare(
@@ -99,6 +103,8 @@ async function main() {
   )
   insTeacher.run('teacher_a', 'org_a', 'u_teacher_a', 'NIP-A', 1)
   insTeacher.run('teacher_b', 'org_b', 'u_teacher_b', 'NIP-B', 2)
+  raw.prepare('INSERT INTO parents (id, organization_id, user_id, phone, created_at) VALUES (?, ?, ?, ?, ?)').run('parent_a', 'org_a', 'u_parent_a', '081', 1)
+  raw.prepare('INSERT INTO parents (id, organization_id, user_id, phone, created_at) VALUES (?, ?, ?, ?, ?)').run('parent_b', 'org_b', 'u_parent_b', '082', 2)
   const insStudent = raw.prepare(
     'INSERT INTO students (id, organization_id, user_id, nis, gender, is_active, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)',
   )
@@ -351,6 +357,27 @@ async function main() {
         body: JSON.stringify({ name: 'Siswa Baru', email: `siswa-${Date.now()}@sekolah.test`, password: PASSWORD, nis: `NIS-${Date.now()}`, classId: 'class_a', gender: 'L' }),
       })
       assert.equal(res.status, 200, `create student harus 200, dapat ${res.status} ${await res.text()}`)
+    })
+    await check('PATCH parent: tautkan siswa org A ke parent org B → 404', async () => {
+      const foreign = await fetch(`${BASE}/api/students/siswa_a/parent`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json', cookie: cookieA },
+        body: JSON.stringify({ parentId: 'parent_b' }),
+      })
+      assert.equal(foreign.status, 404, `cross-tenant parent harus 404, dapat ${foreign.status} ${await foreign.text()}`)
+      const own = await fetch(`${BASE}/api/students/siswa_a/parent`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json', cookie: cookieA },
+        body: JSON.stringify({ parentId: 'parent_a' }),
+      })
+      assert.equal(own.status, 200, `parent sendiri harus 200, dapat ${own.status} ${await own.text()}`)
+      const verifyDb = new Database(DB_PATH, { readonly: true })
+      const row = verifyDb.prepare('SELECT parent_id FROM students WHERE id = ?').get('siswa_a') as { parent_id?: string } | undefined
+      verifyDb.close()
+      assert.equal(row?.parent_id, 'parent_a', `parent_id harus parent_a, dapat ${JSON.stringify(row)}`)
+      const detach = await fetch(`${BASE}/api/students/siswa_a/parent`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json', cookie: cookieA },
+        body: JSON.stringify({ parentId: null }),
+      })
+      assert.equal(detach.status, 200, `lepas tautan harus 200, dapat ${detach.status} ${await detach.text()}`)
     })
     await check('GET /api/organizations/billing menghitung per org is_active', async () => {
       const res = await api(cookieA, '/api/organizations/billing')
